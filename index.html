@@ -9,10 +9,15 @@
     <link rel="stylesheet" href="https://koraytugay.github.io/kt-styles/dist/kt.min.css">
     <link rel="stylesheet" href="styles.css">
     <script>
-        // Follow the device's light / dark setting (set before first paint to avoid a flash).
+        // Before first paint (avoids a flash): follow the device's light / dark setting,
+        // and apply the saved gem color scheme.
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.documentElement.setAttribute('data-theme', 'dark');
         }
+        try {
+            var gems = localStorage.getItem('bw-gems');
+            if (gems && /^[a-z-]+$/.test(gems)) document.documentElement.setAttribute('data-gems', gems);
+        } catch (e) { /* storage unavailable */ }
     </script>
 </head>
 <body>
@@ -33,9 +38,8 @@
             <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="help-button" aria-label="How to play" aria-haspopup="dialog">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </button>
-            <button type="button" class="kt-btn" id="reset-button" aria-label="Start from level 1" title="Start from level 1">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
-                <span>Start from level 1</span>
+            <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="settings-button" aria-label="Settings" aria-haspopup="dialog">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
         </div>
     </header>
@@ -61,8 +65,7 @@
         <section class="kt-card__body game-board-wrap" aria-label="Board">
             <svg class="game-board" id="board" role="grid" aria-label="Puzzle board" aria-describedby="board-help" xmlns="http://www.w3.org/2000/svg"></svg>
             <p class="kt-caption kt-align-center game-board-help" id="board-help">
-                Make every hexagon the same color, <span class="game-swatch" aria-hidden="true"></span> all white or <span class="game-swatch game-swatch--black" aria-hidden="true"></span> all black.
-                Tap a hexagon to flip it and the six around it.
+                Make every hexagon the same color. Tap a hexagon to flip it and the six around it.
             </p>
         </section>
 
@@ -71,8 +74,8 @@
             <div class="kt-stack">
                 <div class="game-actions">
                     <button type="button" class="kt-btn kt-btn--primary kt-btn--lg" id="new-game-button" aria-keyshortcuts="N">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-                        New puzzle
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+                        New run
                     </button>
                     <button type="button" class="kt-btn kt-btn--lg" id="restart-button" aria-keyshortcuts="R">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 9 9 9"/></svg>
@@ -91,6 +94,20 @@
     <div class="game-sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
 </div>
 
+<!-- Settings -->
+<div class="kt-modal kt-modal--sm" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-hidden="true">
+    <div class="kt-modal__dialog">
+        <div class="kt-modal__header">
+            <h2 class="kt-modal__title" id="settings-title">Settings</h2>
+            <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-modal__close" data-close-modal aria-label="Close">✕</button>
+        </div>
+        <div class="kt-modal__body kt-stack">
+            <h3 class="kt-eyebrow" id="gem-colors-label">Gem colors</h3>
+            <div class="kt-grid kt-grid--2 game-schemes" role="group" aria-labelledby="gem-colors-label" id="scheme-list" style="--kt-grid-gap: var(--kt-space-2)"></div>
+        </div>
+    </div>
+</div>
+
 <!-- How to play -->
 <div class="kt-modal kt-modal--sm" id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
     <div class="kt-modal__dialog">
@@ -101,10 +118,10 @@
         <div class="kt-modal__body kt-stack">
             <p>Make every hexagon the same color. All white or all black, either one wins.</p>
             <p>Clicking a hexagon flips it <strong>and all six hexagons touching it</strong>. On the edges there are fewer.</p>
-            <p>The game is endless. The first levels are solved in a single click, then every three levels need one more click. The board grows slowly too. Solve a level and the next one starts right away.</p>
+            <p>The game is endless. The first levels are solved in a single click, then every three levels need one more click. The board grows slowly too. Solve a level and the next one starts right away. Stuck? Restart the level, or begin a new run from level 1.</p>
             <p>Every puzzle is made by scrambling a one-color board with real moves, so it can always be solved, and "solve in" is the true fewest number of clicks.</p>
             <ul class="kt-list kt-text-secondary">
-                <li><kbd>U</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>R</kbd> restart · <kbd>N</kbd> new puzzle</li>
+                <li><kbd>U</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>R</kbd> restart the level · <kbd>N</kbd> new run</li>
             </ul>
         </div>
         <div class="kt-modal__footer">

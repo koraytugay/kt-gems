@@ -261,7 +261,8 @@ function initializeGame() {
         newGame: $('new-game-button'),
         restart: $('restart-button'),
         undo: $('undo-button'),
-        reset: $('reset-button'),
+        settings: $('settings-modal'),
+        schemeList: $('scheme-list'),
         announcer: $('announcer'),
         help: $('help-modal'),
         cells: []
@@ -269,10 +270,18 @@ function initializeGame() {
 
     loadProgress();
 
-    ui.newGame.addEventListener('click', () => startNewGame());
+    ui.newGame.addEventListener('click', newRun);
     ui.restart.addEventListener('click', restartGame);
     ui.undo.addEventListener('click', undoMove);
-    ui.reset.addEventListener('click', resetProgress);
+    $('settings-button').addEventListener('click', () => openModal(ui.settings));
+    ui.schemeList.addEventListener('click', e => {
+        const btn = e.target.closest('[data-scheme]');
+        if (btn) {
+            applyScheme(btn.dataset.scheme);
+            closeModal(ui.settings);   // pick and move on
+        }
+    });
+    renderSchemes();
     $('help-button').addEventListener('click', () => openModal(ui.help));
 
     // Drop the flip class when the flip ends, so hover tints react instantly again
@@ -335,12 +344,73 @@ function saveProgress() {
     } catch (e) { /* storage unavailable */ }
 }
 
-function resetProgress() {
-    if (state.level === 1) return;
-    if (!window.confirm('Start over from level 1?')) return;
+/**
+ * A new run always starts again from level 1 — there is no skipping to a fresh
+ * puzzle at the current level. Past level 1 it asks first, so a misclick can't end a run.
+ */
+function newRun() {
+    if (state.level > 1 && !window.confirm(`Start a new run from level 1? You are on level ${state.level}.`)) return;
     state.level = 1;
     saveProgress();
     startNewGame();
+}
+
+/* ---------- Gem color schemes (only the gems change; set on <html data-gems>) ---------- */
+
+const GEM_SCHEMES = [
+    { id: 'classic',  name: 'Classic' },
+    { id: 'ocean',    name: 'Ocean' },
+    { id: 'teal',     name: 'Teal' },
+    { id: 'forest',   name: 'Forest' },
+    { id: 'violet',   name: 'Violet' },
+    { id: 'rose',     name: 'Rose' },
+    { id: 'amber',    name: 'Amber' },
+    { id: 'contrast', name: 'High contrast' }
+];
+const GEM_STORAGE_KEY = 'bw-gems';
+
+function currentScheme() {
+    const id = document.documentElement.getAttribute('data-gems');
+    return GEM_SCHEMES.some(s => s.id === id) ? id : 'classic';
+}
+
+/** One selectable card per scheme, each previewing a light and a dark gem in its own colors. */
+function renderSchemes() {
+    const hex = (cx, cy, r) => hexPoints(cx, cy, r);
+    ui.schemeList.replaceChildren(...GEM_SCHEMES.map(scheme => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'kt-card kt-card--selectable';
+        btn.dataset.scheme = scheme.id;
+        const body = document.createElement('div');
+        body.className = 'kt-card__body game-scheme';
+        const preview = svg('svg', { viewBox: '0 0 44 24', 'data-gems': scheme.id, 'aria-hidden': 'true', class: 'game-scheme__preview' });
+        for (const [tone, cx] of [['light', 11], ['dark', 31]]) {
+            svg('polygon', { class: `game-scheme__edge game-scheme__edge--${tone}`, points: hex(cx, 12.6, 9) }, preview);
+            svg('polygon', { class: `game-scheme__top game-scheme__top--${tone}`, points: hex(cx, 11, 9) }, preview);
+        }
+        const name = document.createElement('span');
+        name.className = 'game-scheme__name';
+        name.textContent = scheme.name;
+        body.append(preview, name);
+        btn.append(body);
+        return btn;
+    }));
+    updateSchemeButtons();
+}
+
+function updateSchemeButtons() {
+    const active = currentScheme();
+    ui.schemeList.querySelectorAll('[data-scheme]').forEach(btn => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.scheme === active));
+    });
+}
+
+function applyScheme(id) {
+    if (!GEM_SCHEMES.some(s => s.id === id)) return;
+    document.documentElement.setAttribute('data-gems', id);
+    try { localStorage.setItem(GEM_STORAGE_KEY, id); } catch (e) { /* storage unavailable */ }
+    updateSchemeButtons();
 }
 
 /* ---------- Game flow ---------- */
@@ -541,7 +611,6 @@ function updateGameStats() {
     ui.par.textContent = `solve in ${state.par}`;
     ui.undo.disabled = state.solved || state.history.length === 0;
     ui.restart.disabled = state.solved || state.history.length === 0;
-    ui.reset.disabled = state.level === 1;
 }
 
 function showPreview(r, c) {
@@ -593,7 +662,9 @@ function openModal(modal) {
     modalReturnFocus = document.activeElement;
     modal.classList.add('is-open');
     modal.setAttribute('aria-hidden', 'false');
-    const focusTarget = modal.querySelector('.kt-modal__footer .kt-btn--primary') || modal.querySelector('button');
+    const focusTarget = modal.querySelector('[aria-pressed="true"]')
+        || modal.querySelector('.kt-modal__footer .kt-btn--primary')
+        || modal.querySelector('button');
     if (focusTarget) setTimeout(() => focusTarget.focus(), 50);
 }
 
@@ -665,7 +736,7 @@ function handleGlobalKeydown(e) {
     } else if (!e.ctrlKey && !e.metaKey) {
         if (key === 'u') undoMove();
         else if (key === 'r') restartGame();
-        else if (key === 'n') startNewGame();
+        else if (key === 'n') newRun();
     }
 }
 

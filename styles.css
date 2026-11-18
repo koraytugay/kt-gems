@@ -2,25 +2,57 @@
    Black & White — game-specific styles.
    Everything else comes from kt-styles. Layout glue uses kt tokens only.
 
-   The one exception to "tokens only": the two cell colors. They are the
-   game's pieces, not interface chrome, so they must stay literally black and
-   white in both themes (kt's --kt-text / --kt-surface swap in dark mode).
+   The exception to "tokens only" is the gems: they are the game's pieces,
+   not interface chrome, so their colors come from the schemes below and stay
+   the same in light and dark mode (kt's --kt-text / --kt-surface swap).
    ========================================================================== */
 
 :root {
     --game-white: #ffffff;
     --game-black: #111111;
-
-    /* Pieces: a soft off-white and a slate gray (not pure white / black),
-       each with a barely-there shading and a slightly darker edge */
-    --piece-light-top: #f3f4f6;
-    --piece-light-bottom: #e9ebee;
-    --piece-light-edge: #c5c9d0;
-    --piece-dark-top: #575c65;
-    --piece-dark-bottom: #4d525a;
-    --piece-dark-edge: #393d44;
     --game-flip-duration: 180ms;
 }
+
+/* ---------- Gem color schemes ----------
+   A scheme only sets two base colors; every gem shade is derived from them.
+   Chosen in Settings and stored on <html data-gems="…">. The preview gems in the
+   Settings dialog carry their own data-gems, so the shades are worked out per element.
+   Built from kt-styles color tokens where possible. */
+:root,
+[data-gems] {
+    --piece-light-top: var(--gem-light);
+    --piece-light-bottom: color-mix(in srgb, var(--gem-light) 95%, var(--game-black));
+    --piece-light-edge: color-mix(in srgb, var(--gem-light) 78%, var(--game-black));
+    --piece-dark-top: color-mix(in srgb, var(--gem-dark) 88%, var(--game-white));
+    --piece-dark-bottom: var(--gem-dark);
+    --piece-dark-edge: color-mix(in srgb, var(--gem-dark) 70%, var(--game-black));
+}
+:root,
+[data-gems="classic"]  { --gem-dark: #4d525a; --gem-light: #f3f4f6; }   /* slate & porcelain */
+[data-gems="ocean"]    { --gem-dark: color-mix(in srgb, var(--kt-blue) 55%, var(--game-black));   --gem-light: color-mix(in srgb, var(--kt-blue) 14%, var(--game-white)); }
+[data-gems="teal"]     { --gem-dark: color-mix(in srgb, var(--kt-teal) 80%, var(--game-black));   --gem-light: color-mix(in srgb, var(--kt-teal) 13%, var(--game-white)); }
+[data-gems="forest"]   { --gem-dark: color-mix(in srgb, var(--kt-green) 55%, var(--game-black));  --gem-light: color-mix(in srgb, var(--kt-green) 15%, var(--game-white)); }
+[data-gems="violet"]   { --gem-dark: color-mix(in srgb, var(--kt-purple) 65%, var(--game-black)); --gem-light: color-mix(in srgb, var(--kt-purple) 12%, var(--game-white)); }
+[data-gems="rose"]     { --gem-dark: color-mix(in srgb, var(--kt-pink) 62%, var(--game-black));   --gem-light: color-mix(in srgb, var(--kt-pink) 11%, var(--game-white)); }
+[data-gems="amber"]    { --gem-dark: color-mix(in srgb, var(--kt-orange) 48%, var(--game-black)); --gem-light: color-mix(in srgb, var(--kt-gold) 20%, var(--game-white)); }
+[data-gems="contrast"] { --gem-dark: var(--game-black); --gem-light: var(--game-white); }
+
+/* Scheme picker cards (Settings) */
+.game-scheme {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--kt-space-2);
+    padding-right: var(--kt-space-8);   /* room for the card's check mark */
+}
+.game-scheme__preview { width: 64px; height: auto; }
+.game-scheme__top,
+.game-scheme__edge { stroke-width: 1.5; stroke-linejoin: round; }
+.game-scheme__top--light  { fill: var(--piece-light-top);  stroke: var(--piece-light-top); }
+.game-scheme__edge--light { fill: var(--piece-light-edge); stroke: var(--piece-light-edge); }
+.game-scheme__top--dark   { fill: var(--piece-dark-top);   stroke: var(--piece-dark-top); }
+.game-scheme__edge--dark  { fill: var(--piece-dark-edge);  stroke: var(--piece-dark-edge); }
+.game-scheme__name { font-weight: var(--kt-weight-bold); }
 
 /* ---------- Page layout ---------- */
 .game-container {
@@ -66,21 +98,6 @@
     max-width: 100%;
 }
 
-.game-swatch {
-    display: inline-block;
-    width: 0.8em;
-    height: 0.8em;
-    flex: none;
-    border-radius: var(--kt-radius-sm);
-    border: 1px solid var(--kt-border-strong);
-    background: var(--game-white);
-    transition: background-color var(--kt-transition);
-}
-.game-swatch { background: var(--piece-light-top); border-color: var(--piece-light-edge); }
-.game-swatch.is-black,
-.game-swatch--black { background: var(--piece-dark-top); border-color: var(--piece-dark-edge); }
-
-.game-board-help .game-swatch { vertical-align: -0.1em; }
 
 /* ---------- Board ----------
    An SVG tray of hexagonal pieces drawn by game.js. Each .game-cell is:
