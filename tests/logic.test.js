@@ -131,17 +131,3 @@ test('new puzzles differ from the previous one', () => {
         assert.equal(G.boardsEqual(G.generatePuzzle(7, first.board).board, first.board), false);
     }
 });
-
-test('score rewards higher levels, fewer moves and faster times', () => {
-    const perfect = G.calculateScore(10, 10, 20_000, 10);
-    assert.equal(perfect, 1000);
-    assert.ok(G.calculateScore(10, 20, 20_000, 10) < perfect);
-    assert.ok(G.calculateScore(10, 10, 600_000, 10) < perfect);
-    assert.ok(G.calculateScore(11, 11, 20_000, 11) > perfect);
-});
-
-test('time formatting', () => {
-    assert.equal(G.formatTime(0), '0:00');
-    assert.equal(G.formatTime(65_000), '1:05');
-    assert.equal(G.formatTime(3_725_000), '1:02:05');
-});

@@ -215,27 +215,6 @@ function generatePuzzle(level, previousBoard) {
     return fallback;
 }
 
-function formatTime(ms) {
-    const total = Math.floor(ms / 1000);
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = String(total % 60).padStart(2, '0');
-    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
-}
-
-/**
- * Points for one level = 100 × level × move efficiency × time factor.
- *  - efficiency: par ÷ moves (1 when solved in the fewest possible clicks)
- *  - time: full marks within 5 s + 4 s per par click, then it shrinks, never below 25 %
- */
-function calculateScore(level, moves, elapsedMs, par) {
-    const efficiency = Math.min(1, par / Math.max(moves, 1));
-    const allowance = 5 + par * 4;
-    const seconds = elapsedMs / 1000;
-    const timeFactor = seconds <= allowance ? 1 : Math.max(0.25, allowance / seconds);
-    return Math.round(100 * level * efficiency * timeFactor);
-}
-
 /* ==========================================================================
    Part 2 · The page
    ========================================================================== */
@@ -244,18 +223,18 @@ const HEX_R = 10;                        // circumradius in SVG units
 const HEX_W = Math.sqrt(3) * HEX_R;      // pointy-top hex width
 const HEX_PAD = 3;
 const TILE_R = 8.1;                      // piece radius (leaves a gap between pieces)
-const TILE_ROUND = 1.6;
+const TILE_ROUND = 1.6;                  // rounded corners: a same-color stroke this wide
 const TILE_BEVEL = 0.68;                 // flat top's size relative to the piece; the rest is bevel
 // Light from the upper left: how much each of the six bevel facets is lit (+) or shaded (-).
 // Facet i runs between corner i and i+1, starting at the top corner and going clockwise.
-const FACET_LIGHT = [0.5, -0.5, -1, -0.5, 0.5, 1];                  // rounded corners: a same-color stroke this wide
+const FACET_LIGHT = [0.5, -0.5, -1, -0.5, 0.5, 1];
 const TILE_EDGE = 1.7;                   // visible thickness of a piece below its top face
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const STORAGE_KEY = 'bw-hex-progress';
+const NEXT_LEVEL_DELAY = 350;            // pause after the solve wave before the next level drops in
 
 const state = {
-    level: 1,             // the level being played / next to play
-    totalScore: 0,
+    level: 1,             // the level being played
     best: 1,              // highest level reached
     size: 4,
     board: [],
@@ -264,9 +243,7 @@ const state = {
     history: [],          // previous board states, one per move
     moves: 0,
     solved: false,
-    timerId: null,
-    timerStartedAt: 0,
-    elapsedMs: 0,
+    advanceTimer: null,
     focus: [0, 0],
     lastMove: null
 };
@@ -281,19 +258,12 @@ function initializeGame() {
         total: $('stat-total'),
         moves: $('stat-moves'),
         par: $('stat-par'),
-        time: $('stat-time'),
-        timerState: $('stat-timer-state'),
-        points: $('stat-points'),
         newGame: $('new-game-button'),
-        newGameLabel: $('new-game-label'),
         restart: $('restart-button'),
         undo: $('undo-button'),
         reset: $('reset-button'),
         announcer: $('announcer'),
-        result: $('result'),
-        help_text: $('board-help'),
         help: $('help-modal'),
-        theme: $('theme-button'),
         cells: []
     });
 
@@ -304,7 +274,6 @@ function initializeGame() {
     ui.undo.addEventListener('click', undoMove);
     ui.reset.addEventListener('click', resetProgress);
     $('help-button').addEventListener('click', () => openModal(ui.help));
-    ui.theme.addEventListener('click', toggleTheme);
 
     // Drop the flip class when the flip ends, so hover tints react instantly again
     ui.board.addEventListener('animationend', e => {
@@ -343,7 +312,6 @@ function initializeGame() {
     });
     document.addEventListener('keydown', handleGlobalKeydown);
 
-    updateThemeButton();
     startNewGame();
 }
 
@@ -354,7 +322,6 @@ function loadProgress() {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         if (saved && Number.isInteger(saved.level) && saved.level >= 1) {
             state.level = saved.level;
-            state.totalScore = Math.max(0, saved.totalScore | 0);
             state.best = Math.max(saved.level, saved.best | 0);
         }
     } catch (e) { /* storage unavailable or corrupt: start fresh */ }
@@ -363,30 +330,28 @@ function loadProgress() {
 function saveProgress() {
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            level: state.level, totalScore: state.totalScore, best: state.best
+            level: state.level, best: state.best
         }));
     } catch (e) { /* storage unavailable */ }
 }
 
 function resetProgress() {
-    if (state.level === 1 && state.totalScore === 0) return;
-    if (!window.confirm('Start over from level 1? Your total score goes back to 0.')) return;
+    if (state.level === 1) return;
+    if (!window.confirm('Start over from level 1?')) return;
     state.level = 1;
-    state.totalScore = 0;
     saveProgress();
     startNewGame();
 }
 
 /* ---------- Game flow ---------- */
 
-/** Starts a fresh puzzle for the current level (a new level after a solve). */
+/** Starts a fresh puzzle for the current level. */
 function startNewGame() {
     const { size } = levelConfig(state.level);
     const previous = state.initialBoard.length === size ? state.initialBoard : null;
     const puzzle = generatePuzzle(state.level, previous);
 
-    stopTimer();
-    hideResult();
+    clearTimeout(state.advanceTimer);
     Object.assign(state, {
         size,
         board: cloneBoard(puzzle.board),
@@ -395,7 +360,6 @@ function startNewGame() {
         history: [],
         moves: 0,
         solved: false,
-        elapsedMs: 0,
         lastMove: null,
         focus: [Math.floor(size / 2), Math.floor(size / 2)]
     });
@@ -408,13 +372,11 @@ function startNewGame() {
 
 function restartGame() {
     if (state.solved) return;
-    stopTimer();
     const changed = diffCells(state.board, state.initialBoard);
     Object.assign(state, {
         board: cloneBoard(state.initialBoard),
         history: [],
         moves: 0,
-        elapsedMs: 0,
         lastMove: null
     });
     updateBoard(changed);
@@ -425,7 +387,6 @@ function restartGame() {
 function handleCellPress(r, c) {
     if (state.solved) return;
     state.focus = [r, c];
-    if (!state.timerId) startTimer();
 
     state.history.push(cloneBoard(state.board));
     applyMove(state.board, r, c);
@@ -439,9 +400,8 @@ function handleCellPress(r, c) {
     if (winner) {
         state.solved = true;
         state.winner = winner;
-        stopTimer();
-        showCompletionScreen();
         updateGameStats();
+        completeLevel();
     }
 }
 
@@ -460,27 +420,6 @@ function diffCells(a, b) {
     const out = [];
     for (let r = 0; r < a.length; r++) for (let c = 0; c < a.length; c++) if (a[r][c] !== b[r][c]) out.push([r, c]);
     return out;
-}
-
-/* ---------- Timer ---------- */
-
-function startTimer() {
-    stopTimer();
-    state.timerStartedAt = Date.now();
-    state.elapsedMs = 0;
-    state.timerId = setInterval(updateGameStats, 250);
-}
-
-function stopTimer() {
-    if (state.timerId) {
-        clearInterval(state.timerId);
-        state.timerId = null;
-        state.elapsedMs = Date.now() - state.timerStartedAt;
-    }
-}
-
-function currentElapsed() {
-    return state.timerId ? Date.now() - state.timerStartedAt : state.elapsedMs;
 }
 
 /* ---------- Rendering ---------- */
@@ -599,15 +538,11 @@ function updateGameStats() {
     const { size } = levelConfig(state.level);
     ui.level.textContent = state.level;
     ui.total.textContent = `${size} × ${size} board`;
-    ui.points.textContent = state.totalScore.toLocaleString();
     ui.moves.textContent = state.moves;
     ui.par.textContent = `solve in ${state.par}`;
-    ui.time.textContent = formatTime(currentElapsed());
-    ui.timerState.textContent = state.solved ? 'finished' : state.timerId ? 'running' : 'starts on first move';
-    ui.newGameLabel.textContent = state.solved ? 'Next level' : 'New puzzle';
     ui.undo.disabled = state.solved || state.history.length === 0;
-    ui.restart.disabled = state.solved || (state.moves === 0 && state.history.length === 0 && !state.timerId);
-    ui.reset.disabled = state.level === 1 && state.totalScore === 0;
+    ui.restart.disabled = state.solved || state.history.length === 0;
+    ui.reset.disabled = state.level === 1;
 }
 
 function showPreview(r, c) {
@@ -626,26 +561,13 @@ function clearPreview() {
 
 /* ---------- Completion ---------- */
 
-function showCompletionScreen() {
+/** Level solved: the pieces hop in a wave from the winning move, then the next level drops in. */
+function completeLevel() {
     const solvedLevel = state.level;
-    const elapsed = state.elapsedMs;
-    const points = calculateScore(solvedLevel, state.moves, elapsed, state.par);
-    state.totalScore += points;
     state.level = solvedLevel + 1;
     state.best = Math.max(state.best, state.level);
     saveProgress();
 
-    const next = levelConfig(state.level);
-    const set = (id, text) => { document.getElementById(id).textContent = text; };
-    set('result-title', `Level ${solvedLevel} solved, all ${state.winner}`);
-    set('result-moves', state.moves);
-    set('result-par', `fewest ${state.par}`);
-    set('result-time', formatTime(elapsed));
-    set('result-points', `+${points.toLocaleString()}`);
-    set('result-next', `Next: level ${state.level}, ${next.clicks} ${next.clicks === 1 ? 'click' : 'clicks'}`);
-    document.getElementById('result-perfect').hidden = state.moves !== state.par;
-
-    // The pieces hop in a wave from the winning move, then the result slides in
     clearPreview();
     const [lr, lc] = state.lastMove || [0, 0];
     let maxWave = 0;
@@ -657,24 +579,11 @@ function showCompletionScreen() {
         }
     }
     ui.board.classList.add('is-solved', 'is-celebrating');
-    announce(`Level ${solvedLevel} solved, every hexagon is ${state.winner}, in ${state.moves} moves. Plus ${points} points.`);
+    announce(`Level ${solvedLevel} solved in ${state.moves} ${state.moves === 1 ? 'move' : 'moves'}.`);
 
     const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const delay = reduced ? 0 : Math.min(900, maxWave * 45 + 300);
-    const solvedBoard = state.initialBoard;
-    setTimeout(() => {
-        if (!state.solved || state.initialBoard !== solvedBoard) return;
-        ui.help_text.hidden = true;
-        ui.result.hidden = false;
-        requestAnimationFrame(() => ui.result.classList.add('is-visible'));
-        ui.newGame.focus({ preventScroll: true });
-    }, delay);
-}
-
-function hideResult() {
-    ui.result.classList.remove('is-visible');
-    ui.result.hidden = true;
-    ui.help_text.hidden = false;
+    const delay = reduced ? 400 : maxWave * 45 + 420 + NEXT_LEVEL_DELAY;
+    state.advanceTimer = setTimeout(startNewGame, delay);
 }
 
 /* ---------- Modals ---------- */
@@ -770,20 +679,7 @@ function trapFocus(modal, e) {
     else if (!modal.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
 }
 
-/* ---------- Theme & announcements ---------- */
-
-function toggleTheme() {
-    const dark = document.documentElement.getAttribute('data-theme') !== 'dark';
-    if (dark) document.documentElement.setAttribute('data-theme', 'dark');
-    else document.documentElement.removeAttribute('data-theme');
-    try { localStorage.setItem('bw-theme', dark ? 'dark' : 'light'); } catch (e) { /* storage unavailable */ }
-    updateThemeButton();
-}
-
-function updateThemeButton() {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    ui.theme.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
-}
+/* ---------- Announcements ---------- */
 
 function announce(message) {
     ui.announcer.textContent = '';
@@ -800,7 +696,6 @@ if (typeof document !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         levelConfig, createBoard, cloneBoard, boardsEqual, hexNeighbors, flipCell, flipNeighbors, applyMove,
-        affectedCells, hexDistance, checkWinCondition, shuffleBoard, solveBoard, solveShortest, generatePuzzle,
-        calculateScore, formatTime
+        affectedCells, hexDistance, checkWinCondition, shuffleBoard, solveBoard, solveShortest, generatePuzzle
     };
 }

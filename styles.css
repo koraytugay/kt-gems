@@ -55,7 +55,7 @@
 .game-stats {
     flex: 1 1 auto;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--kt-space-2);
 }
 
@@ -210,23 +210,6 @@
     100% { transform: none; }
 }
 
-/* ---------- Result line (replaces the caption under the board) ---------- */
-.game-result {
-    width: 100%;
-    max-width: 600px;
-    opacity: 0;
-    transform: translateY(var(--kt-space-2));
-    transition: opacity var(--kt-transition), transform var(--kt-transition);
-}
-.game-result.is-visible {
-    opacity: 1;
-    transform: none;
-}
-.game-result__chips {
-    justify-content: center;
-    margin-top: var(--kt-space-2);
-}
-
 /* ---------- Controls ---------- */
 .game-controls {
     padding-top: var(--kt-space-4);
@@ -239,7 +222,7 @@
     gap: var(--kt-space-2);
 }
 
-.game-settings { justify-content: center; }
+
 
 /* ---------- Helpers ---------- */
 .game-sr-only {
@@ -254,16 +237,20 @@
     border: 0;
 }
 
-@media (hover: none) {
-    .game-only-keyboard { display: none; }
-}
 
 /* ---------- Small screens ---------- */
 @media (max-width: 520px) {
     .kt-page-header .game-title { font-size: var(--kt-fs-lg); white-space: nowrap; }
-    .game-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #reset-button > span { display: none; }   /* icon only; the button keeps its aria-label */
+    #reset-button { width: var(--kt-control-h); padding: 0; }
     .game-board-wrap { padding-left: var(--kt-space-2); padding-right: var(--kt-space-2); }
     .game-board { padding: var(--kt-space-2); }
+}
+
+/* Very narrow phones: the three action buttons drop their icons so the labels fit */
+@media (max-width: 380px) {
+    .game-actions .kt-btn { padding: 0 var(--kt-space-2); }
+    .game-actions .kt-btn svg { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -274,6 +261,5 @@
     .game-board.is-entering .game-top,
     .game-board.is-entering .game-edge,
     .game-board.is-celebrating .game-top { animation: none; }
-    .game-top,
-    .game-result { transition: none; }
+    .game-top { transition: none; }
 }
