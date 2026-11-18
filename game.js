@@ -321,10 +321,23 @@ function initializeGame() {
     });
     document.addEventListener('keydown', handleGlobalKeydown);
 
-    startNewGame();
+    startNewGame(true);   // resume the saved puzzle, if there is one
 }
 
 /* ---------- Progress (this browser only) ---------- */
+
+/* The level AND the puzzle being played are saved, so reloading the page brings back
+   the same puzzle (as you left it) instead of dealing a new one. The only way to a
+   different puzzle is to solve it or to start a new run. */
+
+const encodeBoard = board => board.map(row => row.map(v => (v ? '1' : '0')).join('')).join('/');
+
+function decodeBoard(text, size) {
+    if (typeof text !== 'string') return null;
+    const rows = text.split('/');
+    if (rows.length !== size || rows.some(row => !/^[01]+$/.test(row) || row.length !== size)) return null;
+    return rows.map(row => [...row].map(ch => ch === '1'));
+}
 
 function loadProgress() {
     try {
@@ -332,16 +345,36 @@ function loadProgress() {
         if (saved && Number.isInteger(saved.level) && saved.level >= 1) {
             state.level = saved.level;
             state.best = Math.max(saved.level, saved.best | 0);
+            if (saved.puzzle && saved.puzzle.level === saved.level) state.savedPuzzle = saved.puzzle;
         }
     } catch (e) { /* storage unavailable or corrupt: start fresh */ }
 }
 
 function saveProgress() {
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            level: state.level, best: state.best
-        }));
-    } catch (e) { /* storage unavailable */ }
+    const data = { level: state.level, best: state.best };
+    if (!state.solved && state.initialBoard.length && state.puzzleLevel === state.level) {
+        data.puzzle = {
+            level: state.puzzleLevel,
+            start: encodeBoard(state.initialBoard),
+            now: encodeBoard(state.board),
+            moves: state.moves
+        };
+    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
+}
+
+/** The saved puzzle for the current level, if it is valid; otherwise null. */
+function takeSavedPuzzle() {
+    const saved = state.savedPuzzle;
+    state.savedPuzzle = null;
+    if (!saved || saved.level !== state.level) return null;
+    const { size } = levelConfig(state.level);
+    const start = decodeBoard(saved.start, size);
+    const now = decodeBoard(saved.now, size);
+    if (!start || !now || checkWinCondition(start) || checkWinCondition(now)) return null;
+    const best = solveShortest(start);
+    if (!best) return null;
+    return { board: start, now, par: best.moves.length, moves: Math.max(0, saved.moves | 0) };
 }
 
 /**
@@ -415,20 +448,25 @@ function applyScheme(id) {
 
 /* ---------- Game flow ---------- */
 
-/** Starts a fresh puzzle for the current level. */
-function startNewGame() {
+/**
+ * Starts the puzzle for the current level: the saved one when resuming after a
+ * reload, otherwise a newly generated one.
+ */
+function startNewGame(resume = false) {
     const { size } = levelConfig(state.level);
+    const restored = resume ? takeSavedPuzzle() : null;
     const previous = state.initialBoard.length === size ? state.initialBoard : null;
-    const puzzle = generatePuzzle(state.level, previous);
+    const puzzle = restored || generatePuzzle(state.level, previous);
 
     clearTimeout(state.advanceTimer);
     Object.assign(state, {
         size,
-        board: cloneBoard(puzzle.board),
+        board: cloneBoard(restored ? restored.now : puzzle.board),
         initialBoard: cloneBoard(puzzle.board),
+        puzzleLevel: state.level,
         par: puzzle.par,
         history: [],
-        moves: 0,
+        moves: restored ? restored.moves : 0,
         solved: false,
         lastMove: null,
         focus: [Math.floor(size / 2), Math.floor(size / 2)]
@@ -437,6 +475,7 @@ function startNewGame() {
     buildBoard();
     updateBoard(null, true);
     updateGameStats();
+    saveProgress();
     announce(`Level ${state.level}. Make every hexagon the same color in ${state.par} ${state.par === 1 ? 'click' : 'clicks'}.`);
 }
 
@@ -451,6 +490,7 @@ function restartGame() {
     });
     updateBoard(changed);
     updateGameStats();
+    saveProgress();
     announce('Puzzle restarted.');
 }
 
@@ -465,6 +505,7 @@ function handleCellPress(r, c) {
 
     updateBoard(affectedCells(state.size, r, c));
     updateGameStats();
+    saveProgress();
 
     const winner = checkWinCondition(state.board);
     if (winner) {
@@ -483,6 +524,7 @@ function undoMove() {
     state.moves = Math.max(0, state.moves - 1);
     updateBoard(changed);
     updateGameStats();
+    saveProgress();
     announce(`Move undone. ${state.moves} ${state.moves === 1 ? 'move' : 'moves'}.`);
 }
 
@@ -610,7 +652,7 @@ function updateGameStats() {
     ui.moves.textContent = state.moves;
     ui.par.textContent = `solve in ${state.par}`;
     ui.undo.disabled = state.solved || state.history.length === 0;
-    ui.restart.disabled = state.solved || state.history.length === 0;
+    ui.restart.disabled = state.solved || state.moves === 0;
 }
 
 function showPreview(r, c) {
