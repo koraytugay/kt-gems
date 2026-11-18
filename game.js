@@ -261,7 +261,7 @@ const NEXT_LEVEL_DELAY = 350;            // pause after the solve wave before th
 // With no key the game simply plays offline.
 const ONLINE = {
     url: 'https://cxtibqbukakubilrvwwu.supabase.co',
-    key: ''
+    key: 'sb_publishable_T8Ety6sOh2Cer-w1-pALcg_gAarJL8t'
 };
 
 const state = {

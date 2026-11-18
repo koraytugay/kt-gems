@@ -24,7 +24,10 @@ const server = createServer(async (req, res) => {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^([/\\])+/, '');
     if (path.startsWith('..')) { res.writeHead(403).end(); return; }
     try {
-        const body = await readFile(join(ROOT, path || 'index.html'));
+        let body = await readFile(join(ROOT, path || 'index.html'));
+        // Never talk to the real leaderboard from tests: serve game.js without its key
+        // (the online checks below plug in a fake server instead)
+        if (path === 'game.js') body = body.toString().replace(/key: '[^']*'/, "key: ''");
         res.writeHead(200, { 'content-type': TYPES[extname(path)] || 'application/octet-stream' }).end(body);
     } catch { res.writeHead(404).end(); }
 });
