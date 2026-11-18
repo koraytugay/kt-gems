@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Black &amp; White</title>
+    <meta name="description" content="Black & White: a simple game of logic. Flip hexagons until the whole board is one color.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5' fill='%23fff' stroke='%23111' stroke-width='1.5'/%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19' fill='%23111'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="https://koraytugay.github.io/kt-styles/dist/kt.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Apply the saved (or system) theme before first paint to avoid a flash.
+        (function () {
+            var theme = null;
+            try { theme = localStorage.getItem('bw-theme'); } catch (e) { /* storage unavailable */ }
+            if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark';
+            if (theme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        })();
+    </script>
+</head>
+<body>
+<div class="kt-container game-container">
+
+    <header class="kt-split game-header">
+        <div class="kt-page-header kt-page-header--left kt-m-0">
+            <h1 class="kt-page-title game-title">
+                <svg class="game-logo" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                    <polygon class="game-logo__light" points="10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5"/>
+                    <polygon class="game-logo__dark" points="10,1 18,5.5 18,14.5 10,19"/>
+                </svg>
+                BLACK &amp; WHITE
+            </h1>
+            <p class="kt-page-subtitle">A simple game of logic.</p>
+        </div>
+        <div class="kt-cluster">
+            <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="help-button" aria-label="How to play" aria-haspopup="dialog">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </button>
+            <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="theme-button" aria-label="Switch to dark theme">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <main class="kt-card game">
+        <!-- Game information -->
+        <section class="kt-card__header" aria-label="Game information">
+            <dl class="game-stats">
+                <div class="kt-stat kt-stat--inset">
+                    <dt class="kt-stat__label">Level</dt>
+                    <dd class="kt-stat__value" id="stat-level">1</dd>
+                    <dd class="kt-stat__sub" id="stat-total">4 × 4 board</dd>
+                </div>
+                <div class="kt-stat kt-stat--inset">
+                    <dt class="kt-stat__label">Moves</dt>
+                    <dd class="kt-stat__value" id="stat-moves">0</dd>
+                    <dd class="kt-stat__sub" id="stat-par">solve in –</dd>
+                </div>
+                <div class="kt-stat kt-stat--inset">
+                    <dt class="kt-stat__label">Time</dt>
+                    <dd class="kt-stat__value" id="stat-time">0:00</dd>
+                    <dd class="kt-stat__sub" id="stat-timer-state">starts on first move</dd>
+                </div>
+                <div class="kt-stat kt-stat--inset">
+                    <dt class="kt-stat__label">Points</dt>
+                    <dd class="kt-stat__value" id="stat-points">0</dd>
+                    <dd class="kt-stat__sub">total</dd>
+                </div>
+            </dl>
+        </section>
+
+        <!-- Game board -->
+        <section class="kt-card__body game-board-wrap" aria-label="Board">
+            <svg class="game-board" id="board" role="grid" aria-label="Puzzle board" aria-describedby="board-help" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div class="game-result" id="result" role="status" hidden>
+                <div class="kt-alert kt-alert--success kt-alert--center">
+                    <span class="kt-alert__title" id="result-title">Level solved</span>
+                    <div class="kt-cluster game-result__chips">
+                        <span class="kt-chip">Moves <strong id="result-moves">0</strong> <span class="kt-chip__meta" id="result-par"></span></span>
+                        <span class="kt-chip">Time <strong id="result-time">0:00</strong></span>
+                        <span class="kt-chip">Points <strong id="result-points">+0</strong></span>
+                        <span class="kt-badge kt-badge--soft-success" id="result-perfect" hidden>Perfect</span>
+                    </div>
+                    <p class="kt-caption kt-mt-2" id="result-next"></p>
+                </div>
+            </div>
+            <p class="kt-caption kt-align-center game-board-help" id="board-help">
+                Make every hexagon the same color, <span class="game-swatch" aria-hidden="true"></span> all white or <span class="game-swatch game-swatch--black" aria-hidden="true"></span> all black.
+                Tap a hexagon to flip it and the six around it.
+                <span class="game-only-keyboard">Arrow keys move, Enter or Space flips.</span>
+            </p>
+        </section>
+
+        <!-- Game controls -->
+        <section class="kt-card__footer game-controls" aria-label="Game controls">
+            <div class="kt-stack">
+                <div class="game-actions">
+                    <button type="button" class="kt-btn kt-btn--primary kt-btn--lg" id="new-game-button" aria-keyshortcuts="N">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                        <span id="new-game-label">New puzzle</span>
+                    </button>
+                    <button type="button" class="kt-btn kt-btn--lg" id="restart-button" aria-keyshortcuts="R">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 3 3 9 9 9"/></svg>
+                        Restart
+                    </button>
+                    <button type="button" class="kt-btn kt-btn--lg" id="undo-button" aria-keyshortcuts="Control+Z Meta+Z U">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                        Undo
+                    </button>
+                </div>
+                <div class="kt-split game-settings">
+                    <button type="button" class="kt-btn kt-btn--ghost kt-btn--lg" id="reset-button">Start over from level 1</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Screen reader announcements -->
+    <div class="game-sr-only" id="announcer" aria-live="polite" aria-atomic="true"></div>
+</div>
+
+<!-- How to play -->
+<div class="kt-modal kt-modal--sm" id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" aria-hidden="true">
+    <div class="kt-modal__dialog">
+        <div class="kt-modal__header">
+            <h2 class="kt-modal__title" id="help-title">How to play</h2>
+            <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-modal__close" data-close-modal aria-label="Close">✕</button>
+        </div>
+        <div class="kt-modal__body kt-stack">
+            <p>Make every hexagon the same color. All white or all black, either one wins.</p>
+            <p>Clicking a hexagon flips it <strong>and all six hexagons touching it</strong>. On the edges there are fewer.</p>
+            <p>The game is endless. The first levels are solved in a single click, then every three levels need one more click. The board grows slowly too.</p>
+            <p>Every puzzle is made by scrambling a one-color board with real moves, so it can always be solved, and "solve in" is the true fewest number of clicks.</p>
+            <p>Points grow with the level, and are higher for fewer moves and faster times.</p>
+            <ul class="kt-list kt-text-secondary">
+                <li><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> move around the board</li>
+                <li><kbd>Enter</kbd> or <kbd>Space</kbd> flips the focused hexagon</li>
+                <li><kbd>U</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>R</kbd> restart · <kbd>N</kbd> new puzzle / next level</li>
+            </ul>
+        </div>
+        <div class="kt-modal__footer">
+            <button type="button" class="kt-btn kt-btn--primary kt-btn--lg" data-close-modal>Got it</button>
+        </div>
+    </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

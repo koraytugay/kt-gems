@@ -1,0 +1,279 @@
+/* ==========================================================================
+   Black & White — game-specific styles.
+   Everything else comes from kt-styles. Layout glue uses kt tokens only.
+
+   The one exception to "tokens only": the two cell colors. They are the
+   game's pieces, not interface chrome, so they must stay literally black and
+   white in both themes (kt's --kt-text / --kt-surface swap in dark mode).
+   ========================================================================== */
+
+:root {
+    --game-white: #ffffff;
+    --game-black: #111111;
+
+    /* Pieces: a soft off-white and a slate gray (not pure white / black),
+       each with a barely-there shading and a slightly darker edge */
+    --piece-light-top: #f3f4f6;
+    --piece-light-bottom: #e9ebee;
+    --piece-light-edge: #c5c9d0;
+    --piece-dark-top: #575c65;
+    --piece-dark-bottom: #4d525a;
+    --piece-dark-edge: #393d44;
+    --game-flip-duration: 180ms;
+}
+
+/* ---------- Page layout ---------- */
+.game-container {
+    max-width: 640px;
+}
+
+.game-header {
+    margin-bottom: var(--kt-space-3);
+    flex-wrap: nowrap;
+}
+.game-header > .kt-cluster { flex-wrap: nowrap; flex: none; }
+
+/* Icons inside buttons keep their size when the button is narrow */
+.kt-btn svg { flex: none; }
+
+.game-title {
+    display: flex;
+    align-items: center;
+    gap: var(--kt-space-2);
+    letter-spacing: var(--kt-tracking-caps);
+}
+
+.game-logo {
+    width: 1.1em;
+    height: 1.1em;
+    flex: none;
+}
+.game-logo__dark  { fill: var(--game-black); stroke: var(--kt-text); stroke-width: 1.5; stroke-linejoin: round; }
+.game-logo__light { fill: var(--game-white); stroke: var(--kt-text); stroke-width: 1.5; stroke-linejoin: round; }
+
+/* ---------- Game information ---------- */
+.game-stats {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--kt-space-2);
+}
+
+.game-stats .kt-stat__sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.game-swatch {
+    display: inline-block;
+    width: 0.8em;
+    height: 0.8em;
+    flex: none;
+    border-radius: var(--kt-radius-sm);
+    border: 1px solid var(--kt-border-strong);
+    background: var(--game-white);
+    transition: background-color var(--kt-transition);
+}
+.game-swatch { background: var(--piece-light-top); border-color: var(--piece-light-edge); }
+.game-swatch.is-black,
+.game-swatch--black { background: var(--piece-dark-top); border-color: var(--piece-dark-edge); }
+
+.game-board-help .game-swatch { vertical-align: -0.1em; }
+
+/* ---------- Board ----------
+   An SVG tray of hexagonal pieces drawn by game.js. Each .game-cell is:
+     .game-edge   the piece's thickness, a hexagon peeking out below the top
+     .game-top    the top face (.game-face) and the flip-preview dot (.game-dot)
+   ------------------------------------------------------------------------- */
+.game-board-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--kt-space-3);
+}
+
+.game-board {
+    display: block;
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    max-height: max(280px, 100svh - 430px);
+    padding: var(--kt-space-3);
+    /* A neutral tray between the two piece colors, so neither looks like an empty slot */
+    background: color-mix(in srgb, var(--kt-border) 85%, var(--kt-surface));
+    border-radius: var(--kt-radius-xl);
+    overflow: visible;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+:root[data-theme="dark"] .game-board {
+    background: color-mix(in srgb, var(--kt-border) 60%, var(--kt-surface));
+}
+
+.game-stop--light-top    { stop-color: var(--piece-light-top); }
+.game-stop--light-bottom { stop-color: var(--piece-light-bottom); }
+.game-stop--dark-top     { stop-color: var(--piece-dark-top); }
+.game-stop--dark-bottom  { stop-color: var(--piece-dark-bottom); }
+
+.game-cell {
+    cursor: pointer;
+    outline: none;
+    transform-box: fill-box;
+    transform-origin: center;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Same-color strokes with round joins give the hexagons soft corners */
+.game-face,
+.game-edge {
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+    /* The color swaps at the midpoint of the flip, while the piece is edge-on */
+    transition: fill 0s linear calc(var(--game-flip-duration) / 2),
+                stroke 0s linear calc(var(--game-flip-duration) / 2);
+}
+.game-face { fill: url(#bw-face-light); stroke: url(#bw-face-light); }
+.game-edge { fill: var(--piece-light-edge); stroke: var(--piece-light-edge); }
+.game-cell.is-black .game-face { fill: url(#bw-face-dark); stroke: url(#bw-face-dark); }
+.game-cell.is-black .game-edge { fill: var(--piece-dark-edge); stroke: var(--piece-dark-edge); }
+
+/* Bevel: six sloped facets around the flat top, lit from the upper left.
+   They are translucent white / black over the face, so they work on both colors. */
+.game-facet { pointer-events: none; stroke: none; }
+.game-facet--lit   { fill: var(--game-white); fill-opacity: calc(var(--facet) * 0.42); }
+.game-facet--shade { fill: var(--game-black); fill-opacity: calc(var(--facet) * 0.2); }
+
+/* Lift: the top face rises, showing more of the edge underneath */
+.game-top {
+    transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Flip: the whole piece turns over like a coin.
+   Two identical animations: alternating between them restarts it without a reflow. */
+.game-cell.flip-a { animation: game-flip-a var(--game-flip-duration) ease-in-out; }
+.game-cell.flip-b { animation: game-flip-b var(--game-flip-duration) ease-in-out; }
+@keyframes game-flip-a { 50% { transform: scaleX(0.04); } }
+@keyframes game-flip-b { 50% { transform: scaleX(0.04); } }
+
+/* ---------- Preview (mouse hover, keyboard focus, finger down) ----------
+   The pieces a click would flip rise together and show a small blue dot;
+   the piece you are about to click rises the highest. */
+.game-dot {
+    fill: var(--kt-info);
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(0);
+    pointer-events: none;
+    transition: transform 140ms ease;
+}
+.game-cell.is-preview .game-top        { transform: translateY(-1.4px); }
+.game-cell.is-preview-center .game-top { transform: translateY(-2.6px); }
+.game-cell.is-preview .game-dot,
+.game-cell.is-preview-center .game-dot { transform: scale(1); }
+
+/* Press: the piece is pushed down into the tray */
+.game-cell:active .game-top,
+.game-cell.is-preview-center:active .game-top {
+    transform: translateY(0.9px);
+    transition-duration: 60ms;
+}
+
+.game-cell:focus-visible { box-shadow: none; }
+
+/* ---------- New level: pieces drop in from the middle outwards ---------- */
+.game-board.is-entering .game-top {
+    animation: game-enter 360ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    animation-delay: calc(var(--enter, 0) * 35ms);
+}
+.game-board.is-entering .game-edge {
+    animation: game-enter-edge 360ms ease both;
+    animation-delay: calc(var(--enter, 0) * 35ms);
+}
+@keyframes game-enter {
+    from { transform: translateY(-6px); opacity: 0; }
+}
+@keyframes game-enter-edge {
+    from { opacity: 0; }
+}
+
+/* ---------- Solved: the pieces hop in a wave from the winning move ---------- */
+.game-board.is-solved .game-cell { cursor: default; }
+.game-board.is-celebrating .game-top {
+    animation: game-hop 420ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+    animation-delay: calc(var(--wave, 0) * 45ms);
+}
+@keyframes game-hop {
+    40% { transform: translateY(-3.5px); }
+    100% { transform: none; }
+}
+
+/* ---------- Result line (replaces the caption under the board) ---------- */
+.game-result {
+    width: 100%;
+    max-width: 600px;
+    opacity: 0;
+    transform: translateY(var(--kt-space-2));
+    transition: opacity var(--kt-transition), transform var(--kt-transition);
+}
+.game-result.is-visible {
+    opacity: 1;
+    transform: none;
+}
+.game-result__chips {
+    justify-content: center;
+    margin-top: var(--kt-space-2);
+}
+
+/* ---------- Controls ---------- */
+.game-controls {
+    padding-top: var(--kt-space-4);
+    padding-bottom: var(--kt-space-4);
+}
+
+.game-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--kt-space-2);
+}
+
+.game-settings { justify-content: center; }
+
+/* ---------- Helpers ---------- */
+.game-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+@media (hover: none) {
+    .game-only-keyboard { display: none; }
+}
+
+/* ---------- Small screens ---------- */
+@media (max-width: 520px) {
+    .kt-page-header .game-title { font-size: var(--kt-fs-lg); white-space: nowrap; }
+    .game-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .game-board-wrap { padding-left: var(--kt-space-2); padding-right: var(--kt-space-2); }
+    .game-board { padding: var(--kt-space-2); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .game-face,
+    .game-edge { transition: fill var(--kt-transition-fast), stroke var(--kt-transition-fast); }
+    .game-cell.flip-a,
+    .game-cell.flip-b,
+    .game-board.is-entering .game-top,
+    .game-board.is-entering .game-edge,
+    .game-board.is-celebrating .game-top { animation: none; }
+    .game-top,
+    .game-result { transition: none; }
+}
