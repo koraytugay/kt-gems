@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Black &amp; White</title>
-    <meta name="description" content="Black & White: a simple game of logic. Flip hexagons until the whole board is one color.">
+    <title>HexaGems</title>
+    <meta name="description" content="HexaGems: flip hexagonal gems until the whole board is one color.">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5' fill='%23fff' stroke='%23111' stroke-width='1.5'/%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19' fill='%23111'/%3E%3C/svg%3E">
     <link rel="stylesheet" href="https://koraytugay.github.io/kt-styles/dist/kt.min.css">
     <link rel="stylesheet" href="styles.css">
@@ -30,9 +30,8 @@
                     <polygon class="game-logo__light" points="10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5"/>
                     <polygon class="game-logo__dark" points="10,1 18,5.5 18,14.5 10,19"/>
                 </svg>
-                BLACK &amp; WHITE
+                HexaGems
             </h1>
-            <p class="kt-page-subtitle">A simple game of logic.</p>
         </div>
         <div class="kt-cluster">
             <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="help-button" aria-label="How to play" aria-haspopup="dialog">
@@ -49,14 +48,14 @@
         <section class="kt-card__header" aria-label="Game information">
             <dl class="game-stats">
                 <div class="kt-stat kt-stat--inset">
-                    <dt class="kt-stat__label">Level</dt>
+                    <dt class="kt-stat__label kt-fs-base">Level</dt>
                     <dd class="kt-stat__value" id="stat-level">1</dd>
-                    <dd class="kt-stat__sub" id="stat-total">4 × 4 board</dd>
+                    <dd class="kt-stat__sub kt-fs-base" id="stat-total">4 × 4 board</dd>
                 </div>
                 <div class="kt-stat kt-stat--inset">
-                    <dt class="kt-stat__label">Moves</dt>
+                    <dt class="kt-stat__label kt-fs-base">Moves</dt>
                     <dd class="kt-stat__value" id="stat-moves">0</dd>
-                    <dd class="kt-stat__sub" id="stat-par">solve in –</dd>
+                    <dd class="kt-stat__sub kt-fs-base" id="stat-par">solve in –</dd>
                 </div>
             </dl>
         </section>
@@ -64,7 +63,7 @@
         <!-- Game board -->
         <section class="kt-card__body game-board-wrap" aria-label="Board">
             <svg class="game-board" id="board" role="grid" aria-label="Puzzle board" aria-describedby="board-help" xmlns="http://www.w3.org/2000/svg"></svg>
-            <p class="kt-caption kt-align-center game-board-help" id="board-help">
+            <p class="kt-caption kt-fs-base kt-align-center game-board-help" id="board-help">
                 Make every hexagon the same color. Tap a hexagon to flip it and the six around it.
             </p>
         </section>
@@ -102,7 +101,7 @@
             <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-modal__close" data-close-modal aria-label="Close">✕</button>
         </div>
         <div class="kt-modal__body kt-stack">
-            <h3 class="kt-eyebrow" id="gem-colors-label">Gem colors</h3>
+            <h3 class="kt-eyebrow kt-fs-base" id="gem-colors-label">Gem colors</h3>
             <div class="kt-grid kt-grid--2 game-schemes" role="group" aria-labelledby="gem-colors-label" id="scheme-list" style="--kt-grid-gap: var(--kt-space-2)"></div>
         </div>
     </div>

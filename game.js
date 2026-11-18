@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Black & White — a hexagonal Lights Out-style flip puzzle, endless mode.
+   HexaGems — a hexagonal Lights Out-style flip puzzle, endless mode.
 
    Board: a 2D array of booleans, board[row][col] === true means BLACK.
    The grid is hexagonal in "odd-r" layout: odd rows sit half a cell to the right.

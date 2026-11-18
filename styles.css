@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Black & White — game-specific styles.
+   HexaGems — game-specific styles.
    Everything else comes from kt-styles. Layout glue uses kt tokens only.
 
    The exception to "tokens only" is the gems: they are the game's pieces,
@@ -90,6 +90,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--kt-space-2);
 }
+
+/* Keyboard keys in How to play: body size like all other text */
+#help-modal kbd { font-size: var(--kt-fs-base); }
+
+/* Level / Moves tiles: centered */
+.game-stats .kt-stat { align-items: center; text-align: center; }
 
 .game-stats .kt-stat__sub {
     white-space: nowrap;
