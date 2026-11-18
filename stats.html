@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>HexaGems stats</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5' fill='%23fff' stroke='%23111' stroke-width='1.5'/%3E%3Cpolygon points='10,1 18,5.5 18,14.5 10,19' fill='%23111'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="https://koraytugay.github.io/kt-styles/dist/kt.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        }
+    </script>
+</head>
+<body>
+<div class="kt-container stats-container">
+
+    <header class="kt-split kt-mb-4">
+        <h1 class="kt-page-title">HexaGems stats</h1>
+        <div class="kt-cluster" id="stats-actions" hidden>
+            <button type="button" class="kt-btn" id="refresh-button">Refresh</button>
+            <button type="button" class="kt-btn kt-btn--ghost" id="lock-button">Forget key</button>
+        </div>
+    </header>
+
+    <!-- Locked: ask for the stats key -->
+    <form class="kt-card kt-card--padded kt-stack" id="key-form" hidden>
+        <label class="kt-field kt-field--grow">
+            <span class="kt-field__label kt-fs-base">Stats key</span>
+            <input class="kt-input kt-input--lg" type="password" id="key-input" autocomplete="current-password" required>
+        </label>
+        <p class="kt-text-danger" id="key-error" hidden>That key didn't work.</p>
+        <div><button type="submit" class="kt-btn kt-btn--primary kt-btn--lg">Show stats</button></div>
+    </form>
+
+    <div class="kt-loading kt-fs-base" id="stats-loading" hidden><div class="kt-spinner"></div>Loading…</div>
+    <div class="kt-alert kt-alert--danger" id="stats-error" hidden></div>
+
+    <!-- Unlocked -->
+    <main class="kt-stack" id="stats" hidden style="--kt-gap: var(--kt-space-6)">
+        <div class="kt-stat-row" id="totals"></div>
+
+        <section>
+            <h2 class="kt-section-title">How far runs get</h2>
+            <p class="kt-text-secondary kt-mb-3">Runs that reached each level.</p>
+            <div class="kt-card kt-card--padded"><div class="kt-bar-list" id="reached"></div></div>
+        </section>
+
+        <section>
+            <h2 class="kt-section-title">Last 30 days</h2>
+            <div class="kt-table-wrap"><table class="kt-table" id="daily"></table></div>
+        </section>
+
+        <section>
+            <h2 class="kt-section-title">Where runs are now</h2>
+            <p class="kt-text-secondary kt-mb-3">The level each run is on (finished or still going).</p>
+            <div class="kt-card kt-card--padded"><div class="kt-bar-list" id="current"></div></div>
+        </section>
+
+        <section>
+            <h2 class="kt-section-title">How hard each level feels</h2>
+            <div class="kt-table-wrap"><table class="kt-table" id="per-level"></table></div>
+        </section>
+
+        <section>
+            <h2 class="kt-section-title">Recent runs</h2>
+            <div class="kt-table-wrap"><table class="kt-table" id="recent"></table></div>
+        </section>
+
+        <p class="kt-text-secondary" id="generated-at"></p>
+    </main>
+</div>
+
+<script src="stats.js"></script>
+</body>
+</html>

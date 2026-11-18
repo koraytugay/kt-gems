@@ -27,7 +27,7 @@ const server = createServer(async (req, res) => {
         let body = await readFile(join(ROOT, path || 'index.html'));
         // Never talk to the real leaderboard from tests: serve game.js without its key
         // (the online checks below plug in a fake server instead)
-        if (path === 'game.js') body = body.toString().replace(/key: '[^']*'/, "key: ''");
+        if (path === 'game.js' || path === 'stats.js') body = body.toString().replace(/key: '[^']*'/, "key: ''");
         res.writeHead(200, { 'content-type': TYPES[extname(path)] || 'application/octet-stream' }).end(body);
     } catch { res.writeHead(404).end(); }
 });
@@ -267,6 +267,36 @@ await ev('closeModal(ui.leaderboard)');
 await ev(`window.fetch = async () => new Response('{"message":"level out of order"}', { status: 400 })`);
 await ev('queueCall("record_solve", { p_player: "x", p_run: "y", p_level: 99, p_moves: 1 })'); await sleep(300);
 check('a call the server rejects is dropped, not retried forever', await ev('JSON.parse(localStorage.getItem("hexagems-queue")).length === 0'));
+
+// ---------- Private stats page (fake server) ----------
+check('the game does not link to the stats page', await ev('!document.querySelector("a[href*=stats]")'));
+await send('Page.navigate', { url: URL_.replace('index.html', 'stats.html') }); await sleep(1000);
+check('stats page: locked, asks for the key, not indexed', await ev('!document.getElementById("key-form").hidden && document.getElementById("stats").hidden && document.querySelector("meta[name=robots]").content.includes("noindex")'));
+await ev(`(() => {
+    window.statsCalls = [];
+    window.fetch = async (url, opts) => {
+        const body = JSON.parse(opts.body);
+        window.statsCalls.push(body);
+        if (body.p_key !== "right-key") return new Response('{"code":"42501","message":"not allowed"}', { status: 401 });
+        return new Response(JSON.stringify({
+            generated_at: new Date().toISOString(),
+            totals: { players: 12, runs: 30, levels_solved: 140, best_run: 22, active_today: 3, active_7_days: 9 },
+            daily: [{ day: "2026-11-17", active_players: 3, runs_started: 4, levels_solved: 20 }],
+            reached: [{ level: 1, runs: 30 }, { level: 2, runs: 25 }, { level: 3, runs: 18 }, { level: 4, runs: 9 }],
+            current: [{ level: 2, runs: 5 }, { level: 4, runs: 9 }],
+            per_level: [{ level: 1, solves: 30, avg_moves: 1.4, fewest: 1 }],
+            recent: [{ name: "Amber Fox #ABCD", started_at: new Date().toISOString(), levels_solved: 3, total_moves: 9, last_active: new Date().toISOString() }]
+        }), { status: 200 });
+    };
+})()`);
+await ev('document.getElementById("key-input").value = "wrong"; document.getElementById("key-form").requestSubmit()'); await sleep(300);
+check('stats page: a wrong key is refused and not remembered', await ev('!document.getElementById("key-error").hidden && document.getElementById("stats").hidden && !localStorage.getItem("hexagems-stats-key")'));
+await ev('document.getElementById("key-input").value = "right-key"; document.getElementById("key-form").requestSubmit()'); await sleep(400);
+check('stats page: the right key shows totals, bars and tables', await ev('!document.getElementById("stats").hidden && document.querySelectorAll("#totals .kt-stat").length === 6 && document.querySelectorAll("#reached .kt-bar-list__row").length === 4 && document.querySelectorAll("#recent tbody tr").length === 1 && localStorage.getItem("hexagems-stats-key") === "right-key"'));
+check('stats page: no text smaller than body size', await ev('(() => { const base = parseFloat(getComputedStyle(document.body).fontSize); return [...document.querySelectorAll("body *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && el.offsetParent !== null).every(el => parseFloat(getComputedStyle(el).fontSize) >= base - 0.01); })()'));
+await shot('11-stats');
+await ev('document.getElementById("lock-button").click()');
+check('stats page: Forget key locks it again', await ev('!document.getElementById("key-form").hidden && !localStorage.getItem("hexagems-stats-key")'));
 
 check('no console errors', errors.length === 0, errors.join('\n'));
 console.log(results.join('\n'));

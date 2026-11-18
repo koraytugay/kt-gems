@@ -282,3 +282,6 @@
     .game-board.is-celebrating .game-top { animation: none; }
     .game-top { transition: none; }
 }
+
+/* ---------- Stats page (stats.html) ---------- */
+.stats-container { max-width: 960px; }
