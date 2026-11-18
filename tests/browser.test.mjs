@@ -69,6 +69,7 @@ const snap = 'JSON.stringify(state.board)';
 check('named HexaGems, no subtitle', await ev('document.title === "HexaGems" && document.querySelector("h1").textContent.trim() === "HexaGems" && !document.querySelector(".kt-page-subtitle")'));
 check('no text smaller than body size', await ev('(() => { const base = parseFloat(getComputedStyle(document.body).fontSize); return [...document.querySelectorAll("body *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && el.offsetParent !== null).every(el => parseFloat(getComputedStyle(el).fontSize) >= base - 0.01); })()'));
 check('Level / Moves text centered', await ev('[...document.querySelectorAll(".game-stats .kt-stat")].every(el => getComputedStyle(el).alignItems === "center" && getComputedStyle(el).textAlign === "center")'));
+check('no logo icon next to the title', await ev('!document.querySelector("h1 svg, .game-logo")'));
 check('caption text', await ev('document.getElementById("board-help").textContent.trim() === "Make every hexagon the same color. Tap a hexagon to flip it and the six around it."'));
 check('no theme button; keyboard hint text removed', await ev('!document.getElementById("theme-button") && !document.body.innerText.includes("Arrow keys move")'));
 check('header: help and settings buttons, no separate reset button', await ev('(() => { const s = document.getElementById("settings-button"); const h = document.getElementById("help-button"); return s.closest("header") && h.closest("header") && s.getAttribute("aria-label") === "Settings" && h.nextElementSibling.id === "leaderboard-button" && h.nextElementSibling.nextElementSibling === s && !document.getElementById("reset-button"); })()'));
@@ -230,6 +231,10 @@ await ev(`(() => {
     window.serverDown = false;
     window.fetch = async (url, opts) => {
         if (window.serverDown) throw new TypeError("Failed to fetch");
+        if (url.includes("geojs.io")) {
+            window.geoLookups = (window.geoLookups || 0) + 1;
+            return new Response(JSON.stringify({ city: "Toronto", region: "Ontario", country_code: "CA", organization_name: "Bell Canada" }), { status: 200 });
+        }
         const fn = url.split("/").pop();
         const body = JSON.parse(opts.body);
         window.calls.push({ fn, body, key: opts.headers.apikey });
@@ -244,6 +249,7 @@ await ev(`(() => {
 await btn('new-game-button'); await sleep(300);
 const startCall = await ev('calls[0]');
 check('New run registers a run with an anonymous player id', startCall && startCall.fn === 'start_run' && /^[0-9a-f-]{36}$/.test(startCall.body.p_player) && startCall.body.p_run === await ev('state.runId') && startCall.key === 'test-key');
+check('a new run sends place, provider, time zone, language and device (never an IP)', await ev('(() => { const i = calls[0].body.p_info; return i.city === "Toronto" && i.region === "Ontario" && i.country === "CA" && i.isp === "Bell Canada" && typeof i.timezone === "string" && typeof i.language === "string" && ["mobile","tablet","desktop"].includes(i.device) && !JSON.stringify(calls[0].body).match(/\\d+\\.\\d+\\.\\d+\\.\\d+/); })()'), await ev('JSON.stringify(calls[0].body.p_info)'));
 check('player id is stable, name stored from the server', await ev('localStorage.getItem("hexagems-player") === calls[0].body.p_player && localStorage.getItem("hexagems-name") === "Amber Fox #ABCD"'));
 const s1 = await ev('solveShortest(state.board).moves');
 for (const m of s1) await clickCell(...m);
@@ -266,6 +272,19 @@ await shot('10-leaderboard');
 await ev('closeModal(ui.leaderboard)');
 await ev(`window.fetch = async () => new Response('{"message":"level out of order"}', { status: 400 })`);
 await ev('queueCall("record_solve", { p_player: "x", p_run: "y", p_level: 99, p_moves: 1 })'); await sleep(300);
+await ev(`(() => {
+    window.oldServerCalls = [];
+    window.fetch = async (url, opts) => {
+        if (url.includes("geojs.io")) return new Response("{}", { status: 200 });
+        const body = JSON.parse(opts.body);
+        window.oldServerCalls.push(body);
+        if (body.p_info) return new Response('{"code":"PGRST202","message":"Could not find the function"}', { status: 404 });
+        return new Response('"Amber Fox #ABCD"', { status: 200 });
+    };
+})()`);
+await ev('queueCall("start_run", { p_player: playerId(), p_run: "00000000-0000-4000-8000-000000000001", p_info: { device: "desktop" } })'); await sleep(300);
+check('older server without p_info: the run still registers', await ev('oldServerCalls.length === 2 && !oldServerCalls[1].p_info && JSON.parse(localStorage.getItem("hexagems-queue")).length === 0'));
+await ev(`window.fetch = async () => new Response('{"message":"level out of order"}', { status: 400 })`);
 check('a call the server rejects is dropped, not retried forever', await ev('JSON.parse(localStorage.getItem("hexagems-queue")).length === 0'));
 
 // ---------- Private stats page (fake server) ----------
@@ -280,19 +299,26 @@ await ev(`(() => {
         if (body.p_key !== "right-key") return new Response('{"code":"42501","message":"not allowed"}', { status: 401 });
         return new Response(JSON.stringify({
             generated_at: new Date().toISOString(),
-            totals: { players: 12, runs: 30, levels_solved: 140, best_run: 22, active_today: 3, active_7_days: 9 },
+            totals: { players: 12, runs: 30, levels_solved: 140, best_run: 22, networks: 11, countries: 3, active_today: 3, active_7_days: 9 },
+            by_city: [{ value: "Toronto, Ontario, CA", players: 5 }, { value: "New York, New York, US", players: 4 }],
+            by_country: [{ value: "CA", players: 6 }, { value: "US", players: 5 }],
+            by_isp: [{ value: "Bell Canada", players: 4 }],
+            by_timezone: [{ value: "America/Toronto", players: 6 }],
+            by_device: [{ value: "mobile", players: 7 }, { value: "desktop", players: 5 }],
+            by_language: [{ value: "en-CA", players: 6 }],
             daily: [{ day: "2026-11-17", active_players: 3, runs_started: 4, levels_solved: 20 }],
             reached: [{ level: 1, runs: 30 }, { level: 2, runs: 25 }, { level: 3, runs: 18 }, { level: 4, runs: 9 }],
             current: [{ level: 2, runs: 5 }, { level: 4, runs: 9 }],
             per_level: [{ level: 1, solves: 30, avg_moves: 1.4, fewest: 1 }],
-            recent: [{ name: "Amber Fox #ABCD", started_at: new Date().toISOString(), levels_solved: 3, total_moves: 9, last_active: new Date().toISOString() }]
+            recent: [{ name: "Amber Fox #ABCD", started_at: new Date().toISOString(), levels_solved: 3, total_moves: 9, last_active: new Date().toISOString(),
+                       city: "Toronto", region: "Ontario", country: "CA", isp: "Bell Canada", device: "mobile", network: "3f9a1c" }]
         }), { status: 200 });
     };
 })()`);
 await ev('document.getElementById("key-input").value = "wrong"; document.getElementById("key-form").requestSubmit()'); await sleep(300);
 check('stats page: a wrong key is refused and not remembered', await ev('!document.getElementById("key-error").hidden && document.getElementById("stats").hidden && !localStorage.getItem("hexagems-stats-key")'));
 await ev('document.getElementById("key-input").value = "right-key"; document.getElementById("key-form").requestSubmit()'); await sleep(400);
-check('stats page: the right key shows totals, bars and tables', await ev('!document.getElementById("stats").hidden && document.querySelectorAll("#totals .kt-stat").length === 6 && document.querySelectorAll("#reached .kt-bar-list__row").length === 4 && document.querySelectorAll("#recent tbody tr").length === 1 && localStorage.getItem("hexagems-stats-key") === "right-key"'));
+check('stats page: the right key shows totals, bars and tables', await ev('!document.getElementById("stats").hidden && document.querySelectorAll("#totals .kt-stat").length === 8 && document.querySelectorAll("#by-city .kt-bar-list__row").length === 2 && document.querySelector("#by-isp").textContent.includes("Bell Canada") && document.querySelector("#recent tbody").textContent.includes("Toronto, Ontario, CA") && document.querySelectorAll("#reached .kt-bar-list__row").length === 4 && document.querySelectorAll("#recent tbody tr").length === 1 && localStorage.getItem("hexagems-stats-key") === "right-key"'));
 check('stats page: no text smaller than body size', await ev('(() => { const base = parseFloat(getComputedStyle(document.body).fontSize); return [...document.querySelectorAll("body *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && el.offsetParent !== null).every(el => parseFloat(getComputedStyle(el).fontSize) >= base - 0.01); })()'));
 await shot('11-stats');
 await ev('document.getElementById("lock-button").click()');

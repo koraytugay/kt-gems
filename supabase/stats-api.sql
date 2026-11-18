@@ -18,6 +18,33 @@ create table if not exists public.admin_settings (
 alter table public.admin_settings enable row level security;
 revoke all on public.admin_settings from anon, authenticated;
 
+-- Distinct players per value of one visitor-info column, most common first (top 20)
+create or replace function public.stats_breakdown(p_column text)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare
+    v jsonb;
+begin
+    if p_column not in ('country', 'timezone', 'device', 'language', 'isp', 'city') then
+        raise exception 'unknown column';
+    end if;
+    -- A fixed list of allowed expressions (never user text in the query)
+    execute format($q$
+        select coalesce(jsonb_agg(jsonb_build_object('value', value, 'players', players) order by players desc, value), '[]'::jsonb)
+          from (select coalesce(%s, 'unknown') as value, count(distinct player_id) as players
+                  from public.runs group by 1 order by 2 desc, 1 limit 20) x
+    $q$, case p_column
+            when 'country'  then 'country'
+            when 'timezone' then 'timezone'
+            when 'device'   then 'device'
+            when 'language' then 'language'
+            when 'isp'      then 'isp'
+            when 'city'     then $e$nullif(concat_ws(', ', city, region, country), '')$e$
+            else null end) into v;
+    return v;
+end
+$$;
+revoke all on function public.stats_breakdown(text) from public, anon, authenticated;
+
 create or replace function public.get_stats(p_key text)
 returns jsonb language plpgsql stable security definer set search_path = public, extensions as $$
 declare
@@ -40,6 +67,8 @@ begin
             'runs',           (select count(*) from public.runs),
             'levels_solved',  (select count(*) from public.solves),
             'best_run',       (select coalesce(max(level) - 1, 0) from public.runs),
+            'networks',       (select count(distinct net_hash) from public.runs),
+            'countries',      (select count(distinct country) from public.runs),
             'active_today',   (select count(distinct r.player_id) from public.runs r
                                 where r.started_at > now() - interval '1 day'
                                    or r.last_solved_at > now() - interval '1 day'),
@@ -92,11 +121,20 @@ begin
             ) x
         ),
 
+        -- Where players are and what they use (distinct players per value)
+        'by_city',     public.stats_breakdown('city'),
+        'by_country',  public.stats_breakdown('country'),
+        'by_isp',      public.stats_breakdown('isp'),
+        'by_timezone', public.stats_breakdown('timezone'),
+        'by_device',   public.stats_breakdown('device'),
+        'by_language', public.stats_breakdown('language'),
+
         -- Most recently active runs
         'recent', (
             select coalesce(jsonb_agg(x), '[]'::jsonb) from (
                 select p.name, r.started_at, r.level - 1 as levels_solved, r.total_moves,
-                       coalesce(r.last_solved_at, r.started_at) as last_active
+                       coalesce(r.last_solved_at, r.started_at) as last_active,
+                       r.country, r.region, r.city, r.isp, r.timezone, r.device, left(r.net_hash, 6) as network
                   from public.runs r join public.players p on p.id = r.player_id
                  order by coalesce(r.last_solved_at, r.started_at) desc
                  limit 25

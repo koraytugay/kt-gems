@@ -48,7 +48,8 @@ function el(tag, className, text) {
 function renderTotals(t) {
     const tiles = [
         ['Players', t.players], ['Runs', t.runs], ['Levels solved', t.levels_solved],
-        ['Best run', t.best_run], ['Active today', t.active_today], ['Active 7 days', t.active_7_days]
+        ['Best run', t.best_run], ['Networks', t.networks], ['Countries', t.countries],
+        ['Active today', t.active_today], ['Active 7 days', t.active_7_days]
     ];
     $('totals').replaceChildren(...tiles.map(([label, value]) => {
         const tile = el('div', 'kt-stat');
@@ -57,17 +58,18 @@ function renderTotals(t) {
     }));
 }
 
-function renderBars(target, rows, emptyText) {
+/** A bar per row: label · bar scaled to the largest value · value. */
+function renderBars(target, rows, emptyText, label = r => `Level ${r.level}`, value = r => r.runs) {
     const list = $(target);
     if (!rows.length) { list.replaceChildren(el('p', 'kt-text-secondary', emptyText)); return; }
-    const max = Math.max(...rows.map(r => r.runs), 1);
+    const max = Math.max(...rows.map(value), 1);
     list.replaceChildren(...rows.map(r => {
         const row = el('div', 'kt-bar-list__row');
         const track = el('div', 'kt-progress kt-progress--lg');
         const bar = el('div', 'kt-progress__bar');
-        bar.style.width = `${(r.runs / max) * 100}%`;
+        bar.style.width = `${(value(r) / max) * 100}%`;
         track.append(bar);
-        row.append(el('span', 'kt-bar-list__label', `Level ${r.level}`), track, el('span', 'kt-bar-list__value', number(r.runs)));
+        row.append(el('span', 'kt-bar-list__label', label(r)), track, el('span', 'kt-bar-list__value', number(value(r))));
         return row;
     }));
 }
@@ -98,14 +100,20 @@ function render(stats) {
     renderTotals(stats.totals);
     renderBars('reached', stats.reached.filter(r => r.runs > 0), 'No runs yet.');
     renderBars('current', stats.current, 'No runs yet.');
+    for (const [target, key] of [['by-city', 'by_city'], ['by-country', 'by_country'], ['by-isp', 'by_isp'],
+                                 ['by-timezone', 'by_timezone'], ['by-device', 'by_device'], ['by-language', 'by_language']]) {
+        renderBars(target, stats[key] || [], 'No data yet.', r => r.value, r => r.players);
+    }
     renderTable('daily', [['Day (UTC)'], ['Active players', true], ['Runs started', true], ['Levels solved', true]],
         stats.daily.map(d => [day(d.day), number(d.active_players), number(d.runs_started), number(d.levels_solved)]),
         'No activity in the last 30 days.');
     renderTable('per-level', [['Level'], ['Solves', true], ['Average moves', true], ['Fewest possible', true]],
         stats.per_level.map(l => [l.level, number(l.solves), l.avg_moves, l.fewest]),
         'No levels solved yet.');
-    renderTable('recent', [['Player'], ['Started'], ['Levels solved', true], ['Moves', true], ['Last active']],
-        stats.recent.map(r => [r.name, dateTime(r.started_at), number(r.levels_solved), number(r.total_moves), dateTime(r.last_active)]),
+    const place = r => [r.city, r.region, r.country].filter(Boolean).join(', ') || '–';
+    renderTable('recent', [['Player'], ['Place'], ['Provider'], ['Device'], ['Network'], ['Levels solved', true], ['Moves', true], ['Last active']],
+        stats.recent.map(r => [r.name, place(r), r.isp || '–', r.device || '–', r.network || '–',
+                               number(r.levels_solved), number(r.total_moves), dateTime(r.last_active)]),
         'No runs yet.');
     $('generated-at').textContent = `Updated ${dateTime(stats.generated_at)}.`;
 }

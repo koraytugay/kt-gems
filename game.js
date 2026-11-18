@@ -737,8 +737,11 @@ function completeLevel() {
 }
 
 /* ---------- Online: anonymous stats + global leaderboard ----------
-   Each browser gets a random player id (no account, no personal data). A run is
-   registered when it starts and every solved level is recorded, in order. Calls
+   Each browser gets a random player id (no account). A run is registered when it
+   starts, with context for the owner's stats: time zone, language, device type,
+   and city / region / country / provider from an IP-geolocation lookup. The server
+   adds a salted hash of the network; the IP itself is never stored. Every solved
+   level is recorded, in order. Calls
    are queued in localStorage and retried, so playing offline loses nothing. */
 
 const PLAYER_KEY = 'hexagems-player';
@@ -781,7 +784,7 @@ async function rpc(fn, args) {
     }
     if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw Object.assign(new Error(text || res.statusText), { retry: res.status >= 500 || res.status === 429 });
+        throw Object.assign(new Error(text || res.statusText), { status: res.status, retry: res.status >= 500 || res.status === 429 });
     }
     return res.json();
 }
@@ -814,7 +817,16 @@ function flushQueue() {
             const item = loadQueue()[0];
             if (!item) break;
             try {
-                const result = await rpc(item.fn, item.args);
+                if (item.fn === 'start_run') item.args.p_info = { ...item.args.p_info, ...(await lookupPlace()) };
+                let result;
+                try {
+                    result = await rpc(item.fn, item.args);
+                } catch (e) {
+                    // A server still on the older start_run (no p_info): register the run without it
+                    if (item.fn !== 'start_run' || e.status !== 404 || !item.args.p_info) throw e;
+                    const { p_info, ...plain } = item.args;
+                    result = await rpc(item.fn, plain);
+                }
                 if (item.fn === 'start_run' && typeof result === 'string') writeStore(NAME_KEY, result);
             } catch (e) {
                 if (e.retry) break;   // offline or server trouble: keep it for later
@@ -827,11 +839,56 @@ function flushQueue() {
     return flushing;
 }
 
+/** Coarse, anonymous context for the owner's stats: time zone, language and device type. */
+function visitorInfo() {
+    const info = {};
+    try { info.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* unavailable */ }
+    if (navigator.language) info.language = navigator.language;
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const shortSide = Math.min(screen.width, screen.height);
+    info.device = !coarse ? 'desktop' : shortSide < 600 ? 'mobile' : 'tablet';
+    return info;
+}
+
+/**
+ * City, region, country and internet provider from a free IP-geolocation service
+ * (GeoJS, falling back to ipwho.is). Only this result is sent to our server, never
+ * the IP. Cached for a few hours; {} when the services can't be reached.
+ */
+const PLACE_KEY = 'hexagems-place';
+const PLACE_MAX_AGE = 6 * 60 * 60 * 1000;
+
+async function lookupPlace() {
+    try {
+        const cached = JSON.parse(readStore(PLACE_KEY) || 'null');
+        if (cached && Date.now() - cached.at < PLACE_MAX_AGE) return cached.place;
+    } catch (e) { /* ignore a broken cache */ }
+
+    const clean = v => (typeof v === 'string' && v.trim() && v.trim().length <= 80 ? v.trim() : undefined);
+    const sources = [
+        ['https://get.geojs.io/v1/ip/geo.json', d => ({ city: d.city, region: d.region, country: d.country_code, isp: d.organization_name })],
+        ['https://ipwho.is/', d => (d.success === false ? null : { city: d.city, region: d.region, country: d.country_code, isp: d.connection && d.connection.isp })]
+    ];
+    for (const [url, pick] of sources) {
+        try {
+            const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+            if (!res.ok) continue;
+            const raw = pick(await res.json());
+            if (!raw) continue;
+            const place = {};
+            for (const k of ['city', 'region', 'country', 'isp']) if (clean(raw[k])) place[k] = clean(raw[k]);
+            writeStore(PLACE_KEY, JSON.stringify({ at: Date.now(), place }));
+            return place;
+        } catch (e) { /* try the next source */ }
+    }
+    return {};
+}
+
 /** Registers a new run and returns its id (null when the leaderboard is not set up). */
 function beginRun() {
     if (!ONLINE.key) return null;
     const run = newId();
-    queueCall('start_run', { p_player: playerId(), p_run: run });
+    queueCall('start_run', { p_player: playerId(), p_run: run, p_info: visitorInfo() });
     return run;
 }
 

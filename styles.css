@@ -64,6 +64,7 @@
     flex-wrap: nowrap;
 }
 .game-header > .kt-cluster { flex-wrap: nowrap; flex: none; }
+.game-header__actions { --kt-gap: 0; }   /* the ghost buttons' own padding already spaces the icons */
 
 /* Icons inside buttons keep their size when the button is narrow */
 .kt-btn svg { flex: none; }
@@ -75,13 +76,6 @@
     letter-spacing: var(--kt-tracking-caps);
 }
 
-.game-logo {
-    width: 1.1em;
-    height: 1.1em;
-    flex: none;
-}
-.game-logo__dark  { fill: var(--game-black); stroke: var(--kt-text); stroke-width: 1.5; stroke-linejoin: round; }
-.game-logo__light { fill: var(--game-white); stroke: var(--kt-text); stroke-width: 1.5; stroke-linejoin: round; }
 
 /* ---------- Game information ---------- */
 .game-stats {

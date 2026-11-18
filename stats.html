@@ -43,6 +43,19 @@
         <div class="kt-stat-row" id="totals"></div>
 
         <section>
+            <h2 class="kt-section-title">Where players are</h2>
+            <p class="kt-text-secondary kt-mb-3">Distinct players per place (from the IP-geolocation lookup when a run starts).</p>
+            <div class="kt-grid kt-grid--2" style="--kt-grid-gap: var(--kt-space-4)">
+                <div class="kt-card kt-card--padded kt-stack"><h3>Cities</h3><div class="kt-bar-list" id="by-city"></div></div>
+                <div class="kt-card kt-card--padded kt-stack"><h3>Countries</h3><div class="kt-bar-list" id="by-country"></div></div>
+                <div class="kt-card kt-card--padded kt-stack"><h3>Internet providers</h3><div class="kt-bar-list" id="by-isp"></div></div>
+                <div class="kt-card kt-card--padded kt-stack"><h3>Time zones</h3><div class="kt-bar-list" id="by-timezone"></div></div>
+                <div class="kt-card kt-card--padded kt-stack"><h3>Devices</h3><div class="kt-bar-list" id="by-device"></div></div>
+                <div class="kt-card kt-card--padded kt-stack"><h3>Languages</h3><div class="kt-bar-list" id="by-language"></div></div>
+            </div>
+        </section>
+
+        <section>
             <h2 class="kt-section-title">How far runs get</h2>
             <p class="kt-text-secondary kt-mb-3">Runs that reached each level.</p>
             <div class="kt-card kt-card--padded"><div class="kt-bar-list" id="reached"></div></div>

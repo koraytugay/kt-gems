@@ -26,14 +26,10 @@
     <header class="kt-split game-header">
         <div class="kt-page-header kt-page-header--left kt-m-0">
             <h1 class="kt-page-title game-title">
-                <svg class="game-logo" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-                    <polygon class="game-logo__light" points="10,1 18,5.5 18,14.5 10,19 2,14.5 2,5.5"/>
-                    <polygon class="game-logo__dark" points="10,1 18,5.5 18,14.5 10,19"/>
-                </svg>
                 HexaGems
             </h1>
         </div>
-        <div class="kt-cluster">
+        <div class="kt-cluster game-header__actions">
             <button type="button" class="kt-btn kt-btn--ghost kt-btn--icon kt-btn--lg" id="help-button" aria-label="How to play" aria-haspopup="dialog">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             </button>
@@ -137,7 +133,7 @@
             <p>Clicking a hexagon flips it <strong>and all six hexagons touching it</strong>. On the edges there are fewer.</p>
             <p>The game is endless. The first levels are solved in a single click, then every three levels need one more click. The board grows slowly too. Solve a level and the next one starts right away. Stuck? Restart the level, or begin a new run from level 1.</p>
             <p>Every puzzle is made by scrambling a one-color board with real moves, so it can always be solved, and "solve in" is the true fewest number of clicks.</p>
-            <p>Runs are shared anonymously for the leaderboard and play stats: a random player ID, the levels you solve and your moves. No account and no personal details.</p>
+            <p>Runs are shared anonymously for the leaderboard and play stats: a random player ID, the levels you solve and your moves, plus context about where you play from: your approximate city, region and country, internet provider, time zone, language, device type and a scrambled network fingerprint. To find the city, your browser asks a free location service (GeoJS) once per run. Your IP address itself is never stored by the game, and there is no account.</p>
             <ul class="kt-list kt-text-secondary">
                 <li><kbd>U</kbd> or <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>R</kbd> restart the level · <kbd>N</kbd> new run</li>
             </ul>
