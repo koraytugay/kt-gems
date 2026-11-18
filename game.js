@@ -478,7 +478,7 @@ function buildBoard() {
         const cellRow = [];
         for (let c = 0; c < size; c++) {
             const [cx, cy] = hexCenter(r, c);
-            // A cell: the piece's edge (its thickness), then the top face with its flip-preview dot
+            // A cell: the piece's edge (its thickness), then its bevelled top face
             const cell = svg('g', { class: 'game-cell', role: 'gridcell', tabindex: '-1' }, row);
             svg('polygon', { class: 'game-edge', points: hexPoints(cx, cy + TILE_EDGE, TILE_R) }, cell);
             const top = svg('g', { class: 'game-top' }, cell);
@@ -494,7 +494,6 @@ function buildBoard() {
                     points: [outer[i], outer[j], inner[j], inner[i]].map(p => p.map(v => v.toFixed(2)).join(',')).join(' ')
                 }, top);
             }
-            svg('circle', { class: 'game-dot', cx: cx.toFixed(2), cy: cy.toFixed(2), r: 1.5 }, top);
             cell.dataset.row = r;
             cell.dataset.col = c;
             cell.style.setProperty('--enter', hexDistance(r, c, mr, mc));

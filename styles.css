@@ -85,7 +85,7 @@
 /* ---------- Board ----------
    An SVG tray of hexagonal pieces drawn by game.js. Each .game-cell is:
      .game-edge   the piece's thickness, a hexagon peeking out below the top
-     .game-top    the top face (.game-face) and the flip-preview dot (.game-dot)
+     .game-top    the bevelled top face (.game-face + .game-facet)
    ------------------------------------------------------------------------- */
 .game-board-wrap {
     display: flex;
@@ -159,20 +159,10 @@
 @keyframes game-flip-b { 50% { transform: scaleX(0.04); } }
 
 /* ---------- Preview (mouse hover, keyboard focus, finger down) ----------
-   The pieces a click would flip rise together and show a small blue dot;
+   The pieces a click would flip rise together;
    the piece you are about to click rises the highest. */
-.game-dot {
-    fill: var(--kt-info);
-    transform-box: fill-box;
-    transform-origin: center;
-    transform: scale(0);
-    pointer-events: none;
-    transition: transform 140ms ease;
-}
 .game-cell.is-preview .game-top        { transform: translateY(-1.4px); }
 .game-cell.is-preview-center .game-top { transform: translateY(-2.6px); }
-.game-cell.is-preview .game-dot,
-.game-cell.is-preview-center .game-dot { transform: scale(1); }
 
 /* Press: the piece is pushed down into the tray */
 .game-cell:active .game-top,
