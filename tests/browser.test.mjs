@@ -295,7 +295,7 @@ await ev(`(() => {
     window.statsCalls = [];
     window.fetch = async (url, opts) => {
         const body = JSON.parse(opts.body);
-        window.statsCalls.push(body);
+        window.statsCalls.push({ fn: url.split("/").pop(), ...body });
         if (body.p_key !== "right-key") return new Response('{"code":"42501","message":"not allowed"}', { status: 401 });
         return new Response(JSON.stringify({
             generated_at: new Date().toISOString(),
@@ -310,10 +310,14 @@ await ev(`(() => {
             reached: [{ level: 1, runs: 30 }, { level: 2, runs: 25 }, { level: 3, runs: 18 }, { level: 4, runs: 9 }],
             current: [{ level: 2, runs: 5 }, { level: 4, runs: 9 }],
             per_level: [{ level: 1, solves: 30, avg_moves: 1.4, fewest: 1 }],
-            recent: [{ name: "Amber Fox #ABCD", started_at: new Date().toISOString(), levels_solved: 3, total_moves: 9, last_active: new Date().toISOString(),
+            recent: [{ id: "11111111-1111-4111-8111-111111111111", name: "Amber Fox #ABCD", started_at: new Date().toISOString(), levels_solved: 3, total_moves: 9, last_active: new Date().toISOString(),
                        city: "Toronto", region: "Ontario", country: "CA", isp: "Bell Canada", device: "mobile", network: "3f9a1c" }]
         }), { status: 200 });
     };
+    const statsFetch = window.fetch;
+    window.fetch = async (url, opts) => url.endsWith("/delete_run")
+        ? (window.statsCalls.push({ fn: "delete_run", ...JSON.parse(opts.body) }), new Response("true", { status: 200 }))
+        : statsFetch(url, opts);
 })()`);
 await ev('document.getElementById("key-input").value = "wrong"; document.getElementById("key-form").requestSubmit()'); await sleep(300);
 check('stats page: a wrong key is refused and not remembered', await ev('!document.getElementById("key-error").hidden && document.getElementById("stats").hidden && !localStorage.getItem("hexagems-stats-key")'));
@@ -321,6 +325,11 @@ await ev('document.getElementById("key-input").value = "right-key"; document.get
 check('stats page: the right key shows totals, bars and tables', await ev('!document.getElementById("stats").hidden && document.querySelectorAll("#totals .kt-stat").length === 8 && document.querySelectorAll("#by-city .kt-bar-list__row").length === 2 && document.querySelector("#by-isp").textContent.includes("Bell Canada") && document.querySelector("#recent tbody").textContent.includes("Toronto, Ontario, CA") && document.querySelectorAll("#reached .kt-bar-list__row").length === 4 && document.querySelectorAll("#recent tbody tr").length === 1 && localStorage.getItem("hexagems-stats-key") === "right-key"'));
 check('stats page: no text smaller than body size', await ev('(() => { const base = parseFloat(getComputedStyle(document.body).fontSize); return [...document.querySelectorAll("body *")].filter(el => el.childNodes.length && [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && el.offsetParent !== null).every(el => parseFloat(getComputedStyle(el).fontSize) >= base - 0.01); })()'));
 await shot('11-stats');
+check('stats page: every recent run has a Delete button', await ev('document.querySelectorAll("#recent tbody button[data-run]").length === document.querySelectorAll("#recent tbody tr").length'));
+await ev('window.confirm = () => false; document.querySelector("#recent button[data-run]").click()'); await sleep(200);
+check('stats page: cancelling the confirm deletes nothing', await ev('!statsCalls.some(c => c.fn === "delete_run")'));
+await ev('window.confirm = () => true; document.querySelector("#recent button[data-run]").click()'); await sleep(400);
+check('stats page: Delete removes that run with the key, then refreshes', await ev('(() => { const d = statsCalls.filter(c => c.fn === "delete_run"); const last = statsCalls[statsCalls.length - 1]; return d.length === 1 && d[0].p_run === "11111111-1111-4111-8111-111111111111" && d[0].p_key === "right-key" && last.fn === "get_stats"; })()'));
 await ev('document.getElementById("lock-button").click()');
 check('stats page: Forget key locks it again', await ev('!document.getElementById("key-form").hidden && !localStorage.getItem("hexagems-stats-key")'));
 

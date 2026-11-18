@@ -18,19 +18,21 @@ function storeKey(key) {
     try { key ? localStorage.setItem(STATS_KEY_STORE, key) : localStorage.removeItem(STATS_KEY_STORE); } catch (e) { /* ignore */ }
 }
 
-async function fetchStats(key) {
-    const res = await fetch(`${STATS_API.url}/rest/v1/rpc/get_stats`, {
+async function callApi(fn, args) {
+    const res = await fetch(`${STATS_API.url}/rest/v1/rpc/${fn}`, {
         method: 'POST',
         headers: { apikey: STATS_API.key, Authorization: `Bearer ${STATS_API.key}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_key: key })
+        body: JSON.stringify(args)
     });
     if (res.status === 401 || res.status === 403) throw Object.assign(new Error('bad key'), { badKey: true });
     if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(text.includes('get_stats') ? 'The stats function is not installed yet (run supabase/stats-api.sql).' : `Server error ${res.status}`);
+        throw new Error(text.includes(fn) ? `The ${fn} function is not installed yet (run supabase/stats-api.sql).` : `Server error ${res.status}`);
     }
     return res.json();
 }
+
+const fetchStats = key => callApi('get_stats', { p_key: key });
 
 /* ---------- Rendering ---------- */
 
@@ -90,7 +92,11 @@ function renderTable(target, headers, rows, emptyText) {
     }
     for (const cells of rows) {
         const tr = el('tr');
-        cells.forEach((value, i) => tr.append(el('td', headers[i][1] ? 'kt-num' : '', String(value))));
+        cells.forEach((value, i) => {
+            const td = el('td', headers[i][1] ? 'kt-num' : '');
+            if (value instanceof Node) td.append(value); else td.textContent = String(value);
+            tr.append(td);
+        });
         tbody.append(tr);
     }
     table.replaceChildren(thead, tbody);
@@ -111,9 +117,18 @@ function render(stats) {
         stats.per_level.map(l => [l.level, number(l.solves), l.avg_moves, l.fewest]),
         'No levels solved yet.');
     const place = r => [r.city, r.region, r.country].filter(Boolean).join(', ') || '–';
-    renderTable('recent', [['Player'], ['Place'], ['Provider'], ['Device'], ['Network'], ['Levels solved', true], ['Moves', true], ['Last active']],
+    const deleteButton = r => {
+        const btn = el('button', 'kt-btn kt-btn--danger', 'Delete');
+        btn.type = 'button';
+        btn.dataset.run = r.id;
+        btn.dataset.label = `${r.name}, ${number(r.levels_solved)} levels solved`;
+        btn.setAttribute('aria-label', `Delete run of ${r.name}`);
+        return btn;
+    };
+    renderTable('recent', [['Player'], ['Place'], ['Provider'], ['Device'], ['Network'], ['Levels solved', true], ['Moves', true], ['Last active'], ['']],
         stats.recent.map(r => [r.name, place(r), r.isp || '–', r.device || '–', r.network || '–',
-                               number(r.levels_solved), number(r.total_moves), dateTime(r.last_active)]),
+                               number(r.levels_solved), number(r.total_moves), dateTime(r.last_active),
+                               r.id ? deleteButton(r) : '']),
         'No runs yet.');
     $('generated-at').textContent = `Updated ${dateTime(stats.generated_at)}.`;
 }
@@ -154,6 +169,20 @@ $('key-form').addEventListener('submit', e => {
     load($('key-input').value.trim());
 });
 $('refresh-button').addEventListener('click', () => load(storedKey()));
+$('recent').addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-run]');
+    if (!btn) return;
+    if (!window.confirm(`Delete this run (${btn.dataset.label})? Its solved levels are deleted too. This can't be undone.`)) return;
+    btn.disabled = true;
+    try {
+        await callApi('delete_run', { p_key: storedKey(), p_run: btn.dataset.run });
+        load(storedKey());
+    } catch (err) {
+        btn.disabled = false;
+        if (err.badKey) { storeKey(null); show('locked'); return; }
+        window.alert(err.message);
+    }
+});
 $('lock-button').addEventListener('click', () => {
     storeKey(null);
     $('key-input').value = '';

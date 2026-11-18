@@ -8,7 +8,7 @@
 --   on conflict (id) do update set stats_key_hash = excluded.stats_key_hash;
 --
 -- To change the key later, run that insert again with a new hash.
--- get_stats() answers only when given the matching key; the tables stay locked.
+-- get_stats() and delete_run() answer only when given the matching key; the tables stay locked.
 -- ==========================================================================
 
 create table if not exists public.admin_settings (
@@ -17,6 +17,15 @@ create table if not exists public.admin_settings (
 );
 alter table public.admin_settings enable row level security;
 revoke all on public.admin_settings from anon, authenticated;
+
+-- True when p_key is the owner's stats key (only its SHA-256 hash is stored)
+create or replace function public.is_stats_key(p_key text)
+returns boolean language sql stable security definer set search_path = public, extensions as $$
+    select p_key is not null and exists (
+        select 1 from public.admin_settings
+         where stats_key_hash = encode(extensions.digest(p_key, 'sha256'), 'hex'))
+$$;
+revoke all on function public.is_stats_key(text) from public, anon, authenticated;
 
 -- Distinct players per value of one visitor-info column, most common first (top 20)
 create or replace function public.stats_breakdown(p_column text)
@@ -50,10 +59,7 @@ returns jsonb language plpgsql stable security definer set search_path = public,
 declare
     v_max_level int;
 begin
-    if p_key is null or not exists (
-        select 1 from public.admin_settings
-         where stats_key_hash = encode(extensions.digest(p_key, 'sha256'), 'hex')
-    ) then
+    if not public.is_stats_key(p_key) then
         raise exception 'not allowed' using errcode = '42501';
     end if;
 
@@ -132,7 +138,7 @@ begin
         -- Most recently active runs
         'recent', (
             select coalesce(jsonb_agg(x), '[]'::jsonb) from (
-                select p.name, r.started_at, r.level - 1 as levels_solved, r.total_moves,
+                select r.id, p.name, r.started_at, r.level - 1 as levels_solved, r.total_moves,
                        coalesce(r.last_solved_at, r.started_at) as last_active,
                        r.country, r.region, r.city, r.isp, r.timezone, r.device, left(r.net_hash, 6) as network
                   from public.runs r join public.players p on p.id = r.player_id
@@ -146,3 +152,26 @@ $$;
 
 revoke all on function public.get_stats(text) from public;
 grant execute on function public.get_stats(text) to anon, authenticated;
+
+-- Delete one run (and its solved levels). If it was the player's last run, the player goes too.
+create or replace function public.delete_run(p_key text, p_run uuid)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare
+    v_player uuid;
+begin
+    if not public.is_stats_key(p_key) then
+        raise exception 'not allowed' using errcode = '42501';
+    end if;
+    delete from public.runs where id = p_run returning player_id into v_player;
+    if v_player is null then
+        return false;
+    end if;
+    delete from public.players p
+     where p.id = v_player
+       and not exists (select 1 from public.runs r where r.player_id = v_player);
+    return true;
+end
+$$;
+
+revoke all on function public.delete_run(text, uuid) from public;
+grant execute on function public.delete_run(text, uuid) to anon, authenticated;
