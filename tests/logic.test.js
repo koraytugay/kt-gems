@@ -87,10 +87,28 @@ test('gentle curve: one more click every 3 levels, board grows slowly', () => {
     const clicks = [];
     for (let level = 1; level <= 12; level++) clicks.push(G.levelConfig(level).clicks);
     assert.deepEqual(clicks, [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4]);
-    assert.deepEqual(G.levelConfig(1), { size: 4, clicks: 1 });
+    assert.deepEqual(G.levelConfig(1), { size: 4, clicks: 1, spread: false });
     assert.equal(G.levelConfig(6).size, 4);          // 2 clicks, still 4x4
     assert.equal(G.levelConfig(55).size, 10);        // 19 clicks
-    assert.deepEqual(G.levelConfig(5000), { size: 10, clicks: 40 });  // endless, capped
+    assert.deepEqual(G.levelConfig(5000), { size: 10, clicks: 40, spread: false });  // endless, capped
+});
+
+test('4 clicks is eased in: levels 10-13 spread their clicks, 14-16 are normal', () => {
+    for (let level = 10; level <= 16; level++) {
+        const cfg = G.levelConfig(level);
+        assert.equal(cfg.clicks, 4, `level ${level}`);
+        assert.equal(cfg.spread, level <= 13, `level ${level}`);
+    }
+    assert.equal(G.levelConfig(17).clicks, 5);
+    for (let level = 10; level <= 13; level++) {
+        for (let i = 0; i < 50; i++) {
+            const p = G.generatePuzzle(level);
+            assert.equal(p.par, 4);
+            p.shuffleMoves.forEach(([r1, c1], a) => p.shuffleMoves.forEach(([r2, c2], b) => {
+                if (a !== b) assert.ok(G.hexDistance(r1, c1, r2, c2) >= 3, 'clicks never flip a common hexagon');
+            }));
+        }
+    }
 });
 
 test('each level needs exactly its click count to reach EITHER color, and is solvable', () => {

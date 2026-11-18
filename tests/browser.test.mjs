@@ -128,7 +128,7 @@ check('restart after reload goes back to the same puzzle start', (await ev('JSON
 await load();
 check('reload after restart: still the same puzzle', (await ev('JSON.stringify(state.initialBoard)')) === p13 && await ev('state.moves === 0'));
 await ev('localStorage.setItem("bw-hex-progress", JSON.stringify({level: 13, best: 13, puzzle: {level: 13, start: "garbage", now: "x", moves: 2}}))'); await load();
-check('corrupt saved puzzle: falls back to a new valid puzzle', await ev('state.level === 13 && state.size === 6 && state.par === 5 && state.moves === 0'));
+check('corrupt saved puzzle: falls back to a new valid puzzle', await ev('state.level === 13 && state.size === levelConfig(13).size && state.par === levelConfig(13).clicks && state.moves === 0'));
 await ev('localStorage.setItem("bw-hex-progress", JSON.stringify({level: 2, best: 13}))'); await load();
 
 // Either color wins: take the route to whichever color is NOT the shortest
@@ -150,7 +150,7 @@ check('then level 8 starts by itself', await ev('state.level === 8 && !state.sol
 
 // Jump to a big level
 await ev('localStorage.setItem("bw-hex-progress", JSON.stringify({level: 25, totalScore: 12345, best: 25}))'); await load();
-check('level 25: 8x8 board, 9 clicks', await ev('state.size===8 && document.querySelectorAll(".game-cell").length===64 && state.par===9'));
+check('level 25: board and clicks match levelConfig', await ev('(() => { const c = levelConfig(25); return state.size === c.size && document.querySelectorAll(".game-cell").length === c.size * c.size && state.par === c.clicks; })()'), await ev('JSON.stringify(levelConfig(25))'));
 // Edge preview: hover a cell -> 7 highlighted
 await ev('state.focus=[4,4]; showPreview(4,4)');
 check('preview marks 7 hexagons', await ev('document.querySelectorAll(".is-preview, .is-preview-center").length===7'));
@@ -162,10 +162,11 @@ await ev('clearPreview()'); await sleep(250);
 check('preview cleared: pieces settle', await ev('[...document.querySelectorAll(".game-cell")].every(el => getComputedStyle(el.querySelector(".game-top")).transform === "none")'));
 // Keyboard
 await ev('document.querySelector(".game-cell[tabindex=\'0\']").focus()');
+const [fr, fc] = await ev('[+document.activeElement.dataset.row, +document.activeElement.dataset.col]');
 await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight', windowsVirtualKeyCode: 39 });
-check('arrow key moves focus', await ev('document.activeElement.dataset.row==="4" && document.activeElement.dataset.col==="5"'));
+check('arrow key moves focus', await ev('+document.activeElement.dataset.row === ' + fr + ' && +document.activeElement.dataset.col === ' + (fc + 1)));
 await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
-check('Enter flips focused hexagon', await ev('state.moves===1 && state.lastMove.join()==="4,5"'));
+check('Enter flips focused hexagon', await ev('state.moves===1 && state.lastMove.join() === "' + fr + ',' + (fc + 1) + '"'));
 check('accessible label', await ev('/^Row \\d+, column \\d+, (black|white)\$/.test(document.activeElement.getAttribute("aria-label"))'), await ev('document.activeElement.getAttribute("aria-label")'));
 // Hit testing: a real mouse click at a cell centre lands on that cell
 const hit = await ev('(() => { const el = document.querySelector(\'.game-cell[data-row="3"][data-col="6"]\'); const b = el.getBoundingClientRect(); const t = document.elementFromPoint(b.x + b.width/2, b.y + b.height/2); return t.closest(".game-cell") === el; })()');
@@ -202,6 +203,10 @@ await shot('05-mobile-level25');
 await viewport(320, 640, true); await sleep(300);
 check('320px: no horizontal scroll', await ev('document.documentElement.scrollWidth <= innerWidth'));
 await shot('06-mobile-320');
+// Easy 4-click levels: the four clicks are spread apart
+await ev('localStorage.setItem("bw-hex-progress", JSON.stringify({level: 10, best: 10}))'); await load();
+check('level 10: 4 clicks, spread-out (easy) puzzle', await ev('state.par === 4 && levelConfig(10).spread === true'));
+await ev('localStorage.setItem("bw-hex-progress", JSON.stringify({level: 25, best: 25}))'); await load();
 check('320px: action button labels fit', await ev('[...document.querySelectorAll(".game-actions .kt-btn")].every(b => b.scrollWidth <= b.clientWidth + 1)'));
 check('320px: header fits on one row', await ev('(() => { const h = document.querySelector(".game-header"); const b = document.getElementById("settings-button").getBoundingClientRect(); const t = document.querySelector(".game-title").getBoundingClientRect(); return b.top < t.bottom && b.right <= innerWidth; })()'));
 await viewport(820, 1180, true);

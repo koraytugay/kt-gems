@@ -23,12 +23,23 @@
 const MAX_SIZE = 10;
 const LEVELS_PER_CLICK = 3;    // levels 1-3 need 1 click, 4-6 need 2, …
 const MAX_CLICKS = 40;
+// Four clicks is where puzzles get noticeably harder, so it is eased in: before the
+// normal 4-click levels come a few "spread" ones whose clicks never overlap.
+const EASY_FOUR_START = 10;    // the first level that needs 4 clicks
+const EASY_FOUR_LEVELS = 4;    // levels 10-13: 4 spread-out clicks; 14-16: normal 4 clicks
 
-/** Board size and required clicks for a level: a gentle, steady climb. */
+/**
+ * Board size, required clicks, and whether the clicks are spread apart (easy),
+ * for a level: a gentle, steady climb.
+ */
 function levelConfig(level) {
-    const clicks = Math.min(MAX_CLICKS, 1 + Math.floor((level - 1) / LEVELS_PER_CLICK));
+    const easy = level >= EASY_FOUR_START && level < EASY_FOUR_START + EASY_FOUR_LEVELS;
+    const step = easy ? EASY_FOUR_START
+        : level >= EASY_FOUR_START + EASY_FOUR_LEVELS ? level - EASY_FOUR_LEVELS
+        : level;
+    const clicks = Math.min(MAX_CLICKS, 1 + Math.floor((step - 1) / LEVELS_PER_CLICK));
     const size = Math.min(MAX_SIZE, 4 + Math.floor((clicks - 1) / 2));
-    return { size, clicks };
+    return { size, clicks, spread: easy };
 }
 
 function randomInt(min, max) {
@@ -106,7 +117,7 @@ function checkWinCondition(board) {
  * Applies `count` moves on distinct, randomly chosen cells (no cell is picked
  * twice, since pressing a cell twice cancels out). Returns the cells used.
  */
-function shuffleBoard(board, count) {
+function shuffleBoard(board, count, spread = false) {
     const size = board.length;
     const all = [];
     for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) all.push([r, c]);
@@ -114,7 +125,19 @@ function shuffleBoard(board, count) {
         const j = Math.floor(Math.random() * (i + 1));
         [all[i], all[j]] = [all[j], all[i]];
     }
-    const picked = all.slice(0, Math.min(count, all.length));
+    let picked;
+    if (spread) {
+        // Spread: no two clicks flip a common hexagon (3+ steps apart), so the
+        // scrambled board shows separate, recognisable flower shapes
+        picked = [];
+        for (const cell of all) {
+            if (picked.length === count) break;
+            if (picked.every(([r, c]) => hexDistance(r, c, cell[0], cell[1]) >= 3)) picked.push(cell);
+        }
+        if (picked.length < count) return null;   // didn't fit this time; the caller retries
+    } else {
+        picked = all.slice(0, Math.min(count, all.length));
+    }
     for (const [r, c] of picked) applyMove(board, r, c);
     return picked;
 }
@@ -197,13 +220,13 @@ function solveShortest(board) {
  * exactly the level's click count, so there is no shortcut.
  */
 function generatePuzzle(level, previousBoard) {
-    const { size, clicks } = levelConfig(level);
+    const { size, clicks, spread } = levelConfig(level);
     let fallback = null;
 
     for (let attempt = 0; attempt < 400; attempt++) {
         const board = createBoard(size, Math.random() < 0.5);
-        const shuffleMoves = shuffleBoard(board, clicks);
-        if (checkWinCondition(board)) continue;
+        const shuffleMoves = shuffleBoard(board, clicks, spread && attempt < 300);
+        if (!shuffleMoves || checkWinCondition(board)) continue;
         if (previousBoard && attempt < 50 && boardsEqual(board, previousBoard)) continue;
 
         const best = solveShortest(board);
