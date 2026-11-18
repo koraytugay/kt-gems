@@ -118,16 +118,14 @@
     height: auto;
     max-height: max(280px, 100svh - 430px);
     padding: var(--kt-space-3);
-    /* A neutral tray between the two piece colors, so neither looks like an empty slot */
-    background: color-mix(in srgb, var(--kt-border) 85%, var(--kt-surface));
-    border-radius: var(--kt-radius-xl);
+    /* The same surface as the Level / Moves tiles (kt-stat--inset) */
+    background: var(--kt-surface-hover);
+    border: 1px solid var(--kt-border);
+    border-radius: var(--kt-radius-lg);
     overflow: visible;
     touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
-}
-:root[data-theme="dark"] .game-board {
-    background: color-mix(in srgb, var(--kt-border) 60%, var(--kt-surface));
 }
 
 .game-stop--light-top    { stop-color: var(--piece-light-top); }
