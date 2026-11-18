@@ -256,9 +256,18 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const STORAGE_KEY = 'bw-hex-progress';
 const NEXT_LEVEL_DELAY = 350;            // pause after the solve wave before the next level drops in
 
+// Anonymous stats + global leaderboard (Supabase). The key is the project's PUBLIC
+// anon / publishable key: it can only call the functions in supabase/schema.sql.
+// With no key the game simply plays offline.
+const ONLINE = {
+    url: 'https://cxtibqbukakubilrvwwu.supabase.co',
+    key: ''
+};
+
 const state = {
     level: 1,             // the level being played
     best: 1,              // highest level reached
+    runId: null,          // this run's anonymous id on the leaderboard (null = not ranked)
     size: 4,
     board: [],
     initialBoard: [],
@@ -306,6 +315,8 @@ function initializeGame() {
     });
     renderSchemes();
     $('help-button').addEventListener('click', () => openModal(ui.help));
+    ui.leaderboard = $('leaderboard-modal');
+    $('leaderboard-button').addEventListener('click', showLeaderboard);
 
     // Drop the flip class when the flip ends, so hover tints react instantly again
     ui.board.addEventListener('animationend', e => {
@@ -344,6 +355,7 @@ function initializeGame() {
     });
     document.addEventListener('keydown', handleGlobalKeydown);
 
+    initOnline();
     startNewGame(true);   // resume the saved puzzle, if there is one
 }
 
@@ -368,13 +380,14 @@ function loadProgress() {
         if (saved && Number.isInteger(saved.level) && saved.level >= 1) {
             state.level = saved.level;
             state.best = Math.max(saved.level, saved.best | 0);
+            if (typeof saved.runId === 'string' && UUID_RE.test(saved.runId)) state.runId = saved.runId;
             if (saved.puzzle && saved.puzzle.level === saved.level) state.savedPuzzle = saved.puzzle;
         }
     } catch (e) { /* storage unavailable or corrupt: start fresh */ }
 }
 
 function saveProgress() {
-    const data = { level: state.level, best: state.best };
+    const data = { level: state.level, best: state.best, runId: state.runId };
     if (!state.solved && state.initialBoard.length && state.puzzleLevel === state.level) {
         data.puzzle = {
             level: state.puzzleLevel,
@@ -407,6 +420,7 @@ function takeSavedPuzzle() {
 function newRun() {
     if (state.level > 1 && !window.confirm(`Start a new run from level 1? You are on level ${state.level}.`)) return;
     state.level = 1;
+    state.runId = beginRun();
     saveProgress();
     startNewGame();
 }
@@ -700,6 +714,9 @@ function completeLevel() {
     state.level = solvedLevel + 1;
     state.best = Math.max(state.best, state.level);
     saveProgress();
+    if (state.runId) {
+        queueCall('record_solve', { p_player: playerId(), p_run: state.runId, p_level: solvedLevel, p_moves: state.moves });
+    }
 
     clearPreview();
     const [lr, lc] = state.lastMove || [0, 0];
@@ -719,6 +736,181 @@ function completeLevel() {
     state.advanceTimer = setTimeout(startNewGame, delay);
 }
 
+/* ---------- Online: anonymous stats + global leaderboard ----------
+   Each browser gets a random player id (no account, no personal data). A run is
+   registered when it starts and every solved level is recorded, in order. Calls
+   are queued in localStorage and retried, so playing offline loses nothing. */
+
+const PLAYER_KEY = 'hexagems-player';
+const NAME_KEY = 'hexagems-name';
+const QUEUE_KEY = 'hexagems-queue';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readStore(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+function writeStore(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* storage unavailable */ } }
+
+function newId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const b = crypto.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6] & 15) | 64;
+    b[8] = (b[8] & 63) | 128;
+    const h = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+function playerId() {
+    let id = readStore(PLAYER_KEY);
+    if (!id || !UUID_RE.test(id)) {
+        id = newId();
+        writeStore(PLAYER_KEY, id);
+    }
+    return id;
+}
+
+/** Calls one of the functions in supabase/schema.sql. Errors carry .retry (try again later?). */
+async function rpc(fn, args) {
+    let res;
+    try {
+        res = await fetch(`${ONLINE.url}/rest/v1/rpc/${fn}`, {
+            method: 'POST',
+            headers: { apikey: ONLINE.key, Authorization: `Bearer ${ONLINE.key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(args)
+        });
+    } catch (e) {
+        throw Object.assign(new Error('network error'), { retry: true });
+    }
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw Object.assign(new Error(text || res.statusText), { retry: res.status >= 500 || res.status === 429 });
+    }
+    return res.json();
+}
+
+function loadQueue() {
+    try {
+        const q = JSON.parse(readStore(QUEUE_KEY) || '[]');
+        return Array.isArray(q) ? q : [];
+    } catch (e) { return []; }
+}
+
+function saveQueue(q) { writeStore(QUEUE_KEY, JSON.stringify(q.slice(-500))); }
+
+function queueCall(fn, args) {
+    if (!ONLINE.key) return;
+    const q = loadQueue();
+    q.push({ fn, args });
+    saveQueue(q);
+    flushQueue();
+}
+
+let flushing = null;
+
+/** Sends queued calls in order. Stops at a network problem (retried later); drops calls the server rejects. */
+function flushQueue() {
+    if (!ONLINE.key) return Promise.resolve();
+    if (flushing) return flushing;
+    flushing = (async () => {
+        for (;;) {
+            const item = loadQueue()[0];
+            if (!item) break;
+            try {
+                const result = await rpc(item.fn, item.args);
+                if (item.fn === 'start_run' && typeof result === 'string') writeStore(NAME_KEY, result);
+            } catch (e) {
+                if (e.retry) break;   // offline or server trouble: keep it for later
+            }
+            const q = loadQueue();
+            q.shift();
+            saveQueue(q);
+        }
+    })().finally(() => { flushing = null; });
+    return flushing;
+}
+
+/** Registers a new run and returns its id (null when the leaderboard is not set up). */
+function beginRun() {
+    if (!ONLINE.key) return null;
+    const run = newId();
+    queueCall('start_run', { p_player: playerId(), p_run: run });
+    return run;
+}
+
+function initOnline() {
+    if (!ONLINE.key) return;
+    playerId();
+    // A first visit (or anyone still on level 1) is ranked straight away. A run already
+    // past level 1 from before the leaderboard existed stays unranked until a New run.
+    if (!state.runId && state.level === 1) state.runId = beginRun();
+    flushQueue();
+    window.addEventListener('online', flushQueue);
+    setInterval(() => { if (loadQueue().length) flushQueue(); }, 30000);
+}
+
+async function showLeaderboard() {
+    const body = document.getElementById('leaderboard-body');
+    const note = document.getElementById('leaderboard-note');
+    const message = (title, text) => {
+        const box = document.createElement('div');
+        box.className = 'kt-empty kt-fs-base';
+        const t = document.createElement('div');
+        t.className = 'kt-empty__title';
+        t.textContent = title;
+        box.append(t);
+        if (text) { const p = document.createElement('p'); p.textContent = text; box.append(p); }
+        body.replaceChildren(box);
+    };
+    openModal(ui.leaderboard);
+    note.textContent = '';
+
+    if (!ONLINE.key) { message('Not set up yet', 'The leaderboard is coming soon.'); return; }
+
+    const loading = document.createElement('div');
+    loading.className = 'kt-loading kt-fs-base';
+    loading.innerHTML = '<div class="kt-spinner"></div>Loading…';
+    body.replaceChildren(loading);
+
+    await flushQueue();
+    let rows;
+    try {
+        rows = await rpc('get_leaderboard', { p_player: playerId(), p_limit: 20 });
+    } catch (e) {
+        message('Leaderboard unavailable', 'Check your connection and try again.');
+        return;
+    }
+
+    if (!rows.length) {
+        message('No one here yet', 'Solve a level to be the first on the board.');
+    } else {
+        const wrap = document.createElement('div');
+        wrap.className = 'kt-table-wrap';
+        const table = document.createElement('table');
+        table.className = 'kt-table';
+        table.innerHTML = '<thead><tr><th class="kt-num">#</th><th>Player</th><th class="kt-num">Levels</th><th class="kt-num">Moves</th></tr></thead>';
+        const tbody = document.createElement('tbody');
+        for (const row of rows) {
+            const tr = document.createElement('tr');
+            if (row.is_you) tr.className = 'game-you';
+            for (const [text, num] of [[row.rank, true], [row.is_you ? `${row.name} (you)` : row.name, false],
+                                        [row.levels_solved, true], [row.total_moves, true]]) {
+                const td = document.createElement('td');
+                if (num) td.className = 'kt-num';
+                td.textContent = text;
+                tr.append(td);
+            }
+            tbody.append(tr);
+        }
+        table.append(tbody);
+        wrap.append(table);
+        body.replaceChildren(wrap);
+    }
+
+    const name = readStore(NAME_KEY);
+    note.textContent = [
+        name ? `You play as ${name}.` : '',
+        state.runId ? '' : 'Your current run started before the leaderboard; start a New run to be ranked.'
+    ].filter(Boolean).join(' ');
+}
+
 /* ---------- Modals ---------- */
 
 let modalReturnFocus = null;
@@ -730,7 +922,12 @@ function openModal(modal) {
     const focusTarget = modal.querySelector('[aria-pressed="true"]')
         || modal.querySelector('.kt-modal__footer .kt-btn--primary')
         || modal.querySelector('button');
-    if (focusTarget) setTimeout(() => focusTarget.focus(), 50);
+    if (!focusTarget) return;
+    // Focus right away; try again once the dialog has finished appearing, in case it didn't take
+    focusTarget.focus({ preventScroll: true });
+    setTimeout(() => {
+        if (modal.classList.contains('is-open') && !modal.contains(document.activeElement)) focusTarget.focus({ preventScroll: true });
+    }, 250);
 }
 
 function closeModal(modal, restoreFocus = true) {

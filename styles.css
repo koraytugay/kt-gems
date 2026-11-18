@@ -94,6 +94,12 @@
 /* Keyboard keys in How to play: body size like all other text */
 #help-modal kbd { font-size: var(--kt-fs-base); }
 
+/* Leaderboard: your own row stands out */
+.kt-table tr.game-you td {
+    background: var(--kt-accent-soft);
+    font-weight: var(--kt-weight-bold);
+}
+
 /* Level / Moves tiles: centered */
 .game-stats .kt-stat { align-items: center; text-align: center; }
 

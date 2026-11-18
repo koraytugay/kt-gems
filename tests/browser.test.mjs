@@ -68,7 +68,7 @@ check('no text smaller than body size', await ev('(() => { const base = parseFlo
 check('Level / Moves text centered', await ev('[...document.querySelectorAll(".game-stats .kt-stat")].every(el => getComputedStyle(el).alignItems === "center" && getComputedStyle(el).textAlign === "center")'));
 check('caption text', await ev('document.getElementById("board-help").textContent.trim() === "Make every hexagon the same color. Tap a hexagon to flip it and the six around it."'));
 check('no theme button; keyboard hint text removed', await ev('!document.getElementById("theme-button") && !document.body.innerText.includes("Arrow keys move")'));
-check('header: help and settings buttons, no separate reset button', await ev('(() => { const s = document.getElementById("settings-button"); const h = document.getElementById("help-button"); return s.closest("header") && h.closest("header") && s.getAttribute("aria-label") === "Settings" && h.nextElementSibling === s && !document.getElementById("reset-button"); })()'));
+check('header: help and settings buttons, no separate reset button', await ev('(() => { const s = document.getElementById("settings-button"); const h = document.getElementById("help-button"); return s.closest("header") && h.closest("header") && s.getAttribute("aria-label") === "Settings" && h.nextElementSibling.id === "leaderboard-button" && h.nextElementSibling.nextElementSibling === s && !document.getElementById("reset-button"); })()'));
 check('main button says New run', await ev('document.getElementById("new-game-button").textContent.trim() === "New run"'));
 check('starts at level 1, 4x4 = 16 hexagons', await ev('state.level===1 && document.querySelectorAll(".game-cell").length===16 && state.par===1'));
 check('DOM matches board', await ev('state.board.flat().filter(Boolean).length === document.querySelectorAll(".game-cell.is-black").length'));
@@ -215,6 +215,56 @@ check('dark device setting gives dark theme', await ev('document.documentElement
 await shot('07-tablet-dark');
 await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] }); await load();
 check('light device setting gives light theme', await ev('!document.documentElement.dataset.theme'));
+// ---------- Online: leaderboard + anonymous stats (against a fake server in the page) ----------
+await viewport(1280, 900, false);
+await ev('localStorage.clear()'); await load();
+await btn('leaderboard-button'); await sleep(300);
+check('no key: leaderboard says not set up, game still works', await ev('document.getElementById("leaderboard-modal").classList.contains("is-open") && document.getElementById("leaderboard-body").textContent.includes("Not set up yet") && !localStorage.getItem("hexagems-queue")'));
+await ev('closeModal(ui.leaderboard)');
+await ev(`(() => {
+    ONLINE.key = "test-key";
+    window.calls = [];
+    window.serverDown = false;
+    window.fetch = async (url, opts) => {
+        if (window.serverDown) throw new TypeError("Failed to fetch");
+        const fn = url.split("/").pop();
+        const body = JSON.parse(opts.body);
+        window.calls.push({ fn, body, key: opts.headers.apikey });
+        const reply = fn === "start_run" ? "Amber Fox #ABCD"
+            : fn === "record_solve" ? body.p_level + 1
+            : [{ rank: 1, name: "Swift Owl #1234", levels_solved: 12, total_moves: 80, is_you: false },
+               { rank: 2, name: "Amber Fox #ABCD", levels_solved: 1, total_moves: 1, is_you: true }];
+        return new Response(JSON.stringify(reply), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    window.confirm = () => true;
+})()`);
+await btn('new-game-button'); await sleep(300);
+const startCall = await ev('calls[0]');
+check('New run registers a run with an anonymous player id', startCall && startCall.fn === 'start_run' && /^[0-9a-f-]{36}$/.test(startCall.body.p_player) && startCall.body.p_run === await ev('state.runId') && startCall.key === 'test-key');
+check('player id is stable, name stored from the server', await ev('localStorage.getItem("hexagems-player") === calls[0].body.p_player && localStorage.getItem("hexagems-name") === "Amber Fox #ABCD"'));
+const s1 = await ev('solveShortest(state.board).moves');
+for (const m of s1) await clickCell(...m);
+await sleep(300);
+check('a solved level is recorded with its level and moves', await ev('(() => { const c = calls.find(c => c.fn === "record_solve"); return c && c.body.p_level === 1 && c.body.p_moves === ' + s1.length + ' && c.body.p_run === state.runId; })()'));
+await sleep(1500);
+// Offline: solves queue up and are sent later, in order
+await ev('window.serverDown = true');
+for (let k = 0; k < 2; k++) {
+    const sol = await ev('solveShortest(state.board).moves');
+    for (const m of sol) await clickCell(...m);
+    await sleep(1600);
+}
+check('offline: solves wait in the queue', await ev('JSON.parse(localStorage.getItem("hexagems-queue")).length === 2 && JSON.parse(localStorage.getItem("hexagems-queue")).map(i => i.args.p_level).join() === "2,3"'));
+await ev('window.serverDown = false'); await ev('flushQueue()');
+check('back online: queued solves are sent in order', await ev('calls.filter(c => c.fn === "record_solve").map(c => c.body.p_level).join() === "1,2,3" && JSON.parse(localStorage.getItem("hexagems-queue")).length === 0'));
+await btn('leaderboard-button'); await sleep(400);
+check('leaderboard shows rows, highlights you, names you', await ev('document.querySelectorAll("#leaderboard-body tbody tr").length === 2 && document.querySelector("#leaderboard-body tr.game-you").textContent.includes("(you)") && document.getElementById("leaderboard-note").textContent.includes("Amber Fox #ABCD")'));
+await shot('10-leaderboard');
+await ev('closeModal(ui.leaderboard)');
+await ev(`window.fetch = async () => new Response('{"message":"level out of order"}', { status: 400 })`);
+await ev('queueCall("record_solve", { p_player: "x", p_run: "y", p_level: 99, p_moves: 1 })'); await sleep(300);
+check('a call the server rejects is dropped, not retried forever', await ev('JSON.parse(localStorage.getItem("hexagems-queue")).length === 0'));
+
 check('no console errors', errors.length === 0, errors.join('\n'));
 console.log(results.join('\n'));
 const failed = results.filter(r => r.startsWith('FAIL')).length;
